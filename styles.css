@@ -26,11 +26,17 @@
 }
 
 html {
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-x: clip;
   scroll-behavior: smooth;
 }
 
 body {
+  max-width: 100%;
   margin: 0;
+  overflow-x: hidden;
+  overflow-x: clip;
   color: var(--ink);
   background: var(--canvas);
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -1635,7 +1641,7 @@ tr:hover .delete-button,
   }
 
   .dashboard {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .period-toolbar {
@@ -1700,17 +1706,36 @@ tr:hover .delete-button,
   }
 
   main {
+    width: 100%;
+    max-width: 100%;
     margin: 0;
     padding: 24px 16px 100px;
   }
 
+  .topbar,
+  .period-toolbar,
+  .dashboard,
+  .transactions-section {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
   .topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: flex-start;
     margin-bottom: 23px;
   }
 
+  .topbar > div:first-child,
+  .transactions-heading > div:first-child {
+    min-width: 0;
+  }
+
   .topbar h1 {
-    font-size: 27px;
+    font-size: clamp(23px, 7vw, 27px);
+    overflow-wrap: anywhere;
   }
 
   .topbar-actions .primary-button {
@@ -1738,11 +1763,24 @@ tr:hover .delete-button,
 
   .period-controls {
     width: 100%;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) 34px;
   }
 
   .month-picker {
-    flex: 1;
+    min-width: 0;
     justify-content: center;
+  }
+
+  .month-picker input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .this-month-button {
+    width: 100%;
+    grid-column: 1 / -1;
   }
 
   .export-button {
@@ -1769,7 +1807,17 @@ tr:hover .delete-button,
   }
 
   .transactions-section {
+    min-width: 0;
     margin-top: 25px;
+  }
+
+  .transactions-heading {
+    min-width: 0;
+    align-items: center;
+  }
+
+  .transactions-heading h2 {
+    overflow-wrap: anywhere;
   }
 
   .mobile-add {
@@ -1783,7 +1831,10 @@ tr:hover .delete-button,
   }
 
   .transaction-tabs {
+    width: 100%;
+    max-width: 100%;
     overflow-x: auto;
+    overscroll-behavior-x: contain;
   }
 
   .toolbar-actions {
@@ -1860,7 +1911,7 @@ tr:hover .delete-button,
   }
 
   .merchant-copy strong {
-    max-width: 130px;
+    max-width: min(130px, 36vw);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1906,12 +1957,40 @@ tr:hover .delete-button,
     max-width: 220px;
   }
 
+  .transactions-heading {
+    gap: 10px;
+  }
+
   .balance-card {
+    min-height: 390px;
     padding: 23px;
   }
 
   .balance-value {
-    margin-top: 38px;
+    margin-top: 28px;
+  }
+
+  .balance-breakdown {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .balance-breakdown > div + div,
+  .balance-breakdown .savings-summary {
+    grid-column: auto;
+    padding: 10px 0 0;
+    margin-top: 10px;
+    border-top: 1px solid rgba(255,255,255,.1);
+    border-left: 0;
+  }
+
+  .spending-card .card-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .spending-card .segmented-control {
+    align-self: flex-start;
   }
 
   .card {

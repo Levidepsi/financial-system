@@ -43,9 +43,9 @@
 
         <div class="sidebar-footer">
           <button class="profile-button" type="button" aria-label="Open profile menu">
-            <span class="avatar">AS</span>
+            <span class="avatar">FU</span>
             <span class="profile-copy">
-              <strong>Alex Smith</strong>
+              <strong>Financial User</strong>
               <small>Personal account</small>
             </span>
             <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></svg>
@@ -57,7 +57,7 @@
         <header class="topbar">
           <div>
             <p class="eyebrow" id="today-label">Friday, August 14</p>
-            <h1 id="greeting">Good morning, Alex.</h1>
+            <h1 id="greeting">Good morning, Financial User.</h1>
             <p>Here’s how your money is looking today.</p>
           </div>
           <div class="topbar-actions">
@@ -194,6 +194,7 @@
               <h2 id="transactions-title">This month’s transactions</h2>
             </div>
             <div class="transactions-heading-actions">
+              <!-- Backup and JSON restore are temporarily disabled.
               <button class="secondary-button data-button" id="backup-data" type="button" aria-label="Download a backup of all transaction data">
                 <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 20h14" /></svg>
                 <span>Backup</span>
@@ -203,6 +204,12 @@
                 <span>Restore</span>
               </button>
               <input id="restore-file" type="file" accept="application/json,.json" hidden />
+              -->
+              <button class="secondary-button data-button" id="import-csv" type="button" aria-label="Import transactions from a CSV file">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 21V9m0 0 5 5m-5-5-5 5M5 4h14" /></svg>
+                <span>Import CSV</span>
+              </button>
+              <input id="import-csv-file" type="file" accept="text/csv,.csv" hidden />
               <button class="secondary-button mobile-add" type="button" data-open-dialog>
                 <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
                 Add

@@ -214,9 +214,8 @@ const elements = {
   search: document.querySelector("#transaction-search"),
   category: document.querySelector("#category-filter"),
   date: document.querySelector("#transaction-date"),
-  backupData: document.querySelector("#backup-data"),
-  restoreData: document.querySelector("#restore-data"),
-  restoreFile: document.querySelector("#restore-file"),
+  importCsv: document.querySelector("#import-csv"),
+  importCsvFile: document.querySelector("#import-csv-file"),
   periodToolbar: document.querySelector(".period-toolbar"),
   periodTitle: document.querySelector("#period-title"),
   periodMeta: document.querySelector("#period-meta"),
@@ -632,6 +631,160 @@ async function restoreData(event) {
   }
 }
 
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let quoted = false;
+  const source = text.replace(/^\uFEFF/, "");
+
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (quoted) {
+      if (character === '"' && source[index + 1] === '"') {
+        field += '"';
+        index += 1;
+      } else if (character === '"') {
+        quoted = false;
+      } else {
+        field += character;
+      }
+    } else if (character === '"' && field === "") {
+      quoted = true;
+    } else if (character === ",") {
+      row.push(field);
+      field = "";
+    } else if (character === "\n") {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+    } else if (character !== "\r") {
+      field += character;
+    }
+  }
+
+  if (quoted) throw new Error("The CSV contains an unfinished quoted value.");
+  if (field || row.length) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows;
+}
+
+function normalizeCsvDate(value) {
+  const date = String(value ?? "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+  const match = date.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  return match ? `${match[3]}-${pad(match[1])}-${pad(match[2])}` : date;
+}
+
+function transactionFingerprint(transaction) {
+  return [
+    transaction.date,
+    transaction.type,
+    transaction.name.toLowerCase(),
+    transaction.category,
+    transaction.note.toLowerCase(),
+    transaction.amount.toFixed(2),
+  ].join("\u001f");
+}
+
+async function importCsv(event) {
+  const [file] = event.target.files;
+  event.target.value = "";
+  if (!file) return;
+
+  try {
+    if (file.size > 5_000_000) throw new Error("CSV files must be smaller than 5 MB.");
+    const rows = parseCsv(await file.text());
+    if (rows.length < 2) throw new Error("The CSV does not contain transaction rows.");
+
+    const headers = rows[0].map((header) => header.trim().toLowerCase().replace(/\s+/g, " "));
+    const column = (...names) => headers.findIndex((header) => names.includes(header));
+    const columns = {
+      date: column("date", "transaction date"),
+      type: column("type", "transaction type"),
+      name: column("name", "transaction", "description"),
+      category: column("category"),
+      note: column("note", "notes"),
+      amount: column("amount", "amount (php)", "amount php"),
+    };
+    if ([columns.date, columns.type, columns.name, columns.category, columns.amount].includes(-1)) {
+      throw new Error("Required columns: Date, Type, Name, Category, and Amount (PHP).");
+    }
+
+    const typeAliases = {
+      expense: "expense",
+      expenses: "expense",
+      income: "income",
+      incomes: "income",
+      saving: "savings",
+      savings: "savings",
+    };
+    const categoryNames = Object.keys(categoryThemes);
+    const existing = new Set(state.transactions.map(transactionFingerprint));
+    const imported = [];
+    let invalidCount = 0;
+    let duplicateCount = 0;
+
+    for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
+      const row = rows[rowIndex];
+      if (row.every((value) => !value.trim())) continue;
+      if (row[0]?.trim().toLowerCase() === "monthly summary") break;
+
+      const cleanText = (value) => String(value ?? "").trim().replace(/^'(?=[=+\-@\t\r])/, "");
+      const type = typeAliases[cleanText(row[columns.type]).toLowerCase()] ?? "";
+      const rawCategory = cleanText(row[columns.category]);
+      let category = categoryNames.find((name) => name.toLowerCase() === rawCategory.toLowerCase()) ?? rawCategory;
+      if (type === "income") category = "Income";
+      if (type === "savings") category = "Savings";
+      const rawAmount = cleanText(row[columns.amount]).replace(/^PHP\s*/i, "").replace(/[₱,\s]/g, "");
+      const transaction = normalizeTransaction({
+        id: `t-${Date.now()}-${rowIndex}-${Math.random().toString(36).slice(2, 8)}`,
+        name: cleanText(row[columns.name]),
+        note: columns.note >= 0 ? cleanText(row[columns.note]) : "",
+        category,
+        type,
+        amount: Number(rawAmount),
+        date: normalizeCsvDate(row[columns.date]),
+      });
+
+      if (!transaction) {
+        invalidCount += 1;
+        continue;
+      }
+      const fingerprint = transactionFingerprint(transaction);
+      if (existing.has(fingerprint)) {
+        duplicateCount += 1;
+        continue;
+      }
+      existing.add(fingerprint);
+      imported.push(transaction);
+    }
+
+    if (!imported.length) {
+      const reason = duplicateCount
+        ? `${duplicateCount} matching transactions already exist.`
+        : "No valid transaction rows were found.";
+      throw new Error(reason);
+    }
+
+    const skipped = invalidCount + duplicateCount;
+    const confirmed = window.confirm(`Import ${imported.length} transactions${skipped ? ` and skip ${skipped} invalid or duplicate rows` : ""}?`);
+    if (!confirmed) return;
+
+    state.transactions.push(...imported);
+    state.selectedMonth = imported.map((transaction) => transaction.date.slice(0, 7)).sort().at(-1);
+    state.visibleLimit = 6;
+    saveTransactions();
+    renderAll();
+    showToast("CSV imported", `${imported.length} transactions added${skipped ? `; ${skipped} rows skipped` : ""}.`);
+  } catch (error) {
+    showToast("CSV import failed", error instanceof Error ? error.message : "The file could not be read.");
+  }
+}
+
 function exportSelectedMonth() {
   const transactions = transactionsForMonth().sort((a, b) => new Date(a.date) - new Date(b.date));
   const totals = getTotals(transactions);
@@ -653,7 +806,7 @@ function exportSelectedMonth() {
 document.querySelector("#today-label").textContent = fullDateFormatter.format(today);
 const currentHour = today.getHours();
 const greeting = currentHour < 12 ? "Good morning" : currentHour < 18 ? "Good afternoon" : "Good evening";
-document.querySelector("#greeting").textContent = `${greeting}, Alex.`;
+document.querySelector("#greeting").textContent = `${greeting}, Financial User.`;
 
 document.querySelectorAll("[data-open-dialog]").forEach((button) => button.addEventListener("click", openDialog));
 document.querySelectorAll("[data-close-dialog]").forEach((button) => button.addEventListener("click", closeDialog));
@@ -744,9 +897,9 @@ elements.nextMonth.addEventListener("click", () => selectMonth(offsetMonth(state
 elements.monthPicker.addEventListener("change", (event) => selectMonth(event.target.value));
 document.querySelector("#this-month").addEventListener("click", () => selectMonth(currentMonth));
 document.querySelector("#export-month").addEventListener("click", exportSelectedMonth);
-elements.backupData.addEventListener("click", backupData);
-elements.restoreData.addEventListener("click", () => elements.restoreFile.click());
-elements.restoreFile.addEventListener("change", restoreData);
+// Backup and JSON restore controls are temporarily disabled in index.html.
+elements.importCsv.addEventListener("click", () => elements.importCsvFile.click());
+elements.importCsvFile.addEventListener("change", importCsv);
 document.querySelector("#toast-action").addEventListener("click", () => {
   if (toastAction) toastAction();
   toastAction = null;
