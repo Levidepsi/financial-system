@@ -107,8 +107,46 @@ const categoryThemes = {
   Savings: { className: "savings", color: "#426d9d", bg: "#e7eff8", icon: '<path d="M5 10h14v10H5zM8 10V8a4 4 0 0 1 8 0v2M9 15h6" />' },
 };
 
-function isTransactionList(value) {
-  return Array.isArray(value) && value.every((item) => item && typeof item.date === "string");
+function normalizeTransaction(item) {
+  if (!item || typeof item !== "object") return null;
+
+  const id = typeof item.id === "string" ? item.id.trim() : "";
+  const name = typeof item.name === "string" ? item.name.trim() : "";
+  const note = typeof item.note === "string" ? item.note.trim() : "";
+  const type = typeof item.type === "string" ? item.type : "";
+  const category = typeof item.category === "string" ? item.category : "";
+  const amount = Number(item.amount);
+  const date = typeof item.date === "string" ? item.date : "";
+  const validDate = /^\d{4}-\d{2}-\d{2}$/.test(date)
+    && localDateString(new Date(`${date}T12:00:00`)) === date
+    && date <= todayKey;
+
+  if (!/^[\w-]{1,100}$/.test(id)
+    || !name || name.length > 60
+    || note.length > 100
+    || !["expense", "income", "savings"].includes(type)
+    || !Object.hasOwn(categoryThemes, category)
+    || (type === "expense" && ["Income", "Savings"].includes(category))
+    || !Number.isFinite(amount) || amount <= 0 || amount > 999999999.99
+    || !validDate) return null;
+
+  return {
+    id,
+    name,
+    note,
+    type,
+    category: type === "income" ? "Income" : type === "savings" ? "Savings" : category,
+    amount: Math.round(amount * 100) / 100,
+    date,
+  };
+}
+
+function normalizeTransactionList(value) {
+  if (!Array.isArray(value)) return null;
+  const transactions = value.map(normalizeTransaction);
+  if (transactions.some((transaction) => !transaction)) return null;
+  if (new Set(transactions.map((transaction) => transaction.id)).size !== transactions.length) return null;
+  return transactions;
 }
 
 function addMissingHistory(transactions) {
@@ -118,12 +156,12 @@ function addMissingHistory(transactions) {
 
 function loadTransactions() {
   try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (isTransactionList(saved)) return saved;
+    const saved = normalizeTransactionList(JSON.parse(localStorage.getItem(STORAGE_KEY)));
+    if (saved) return saved;
 
     for (const key of LEGACY_STORAGE_KEYS) {
-      const legacy = JSON.parse(localStorage.getItem(key));
-      if (isTransactionList(legacy)) {
+      const legacy = normalizeTransactionList(JSON.parse(localStorage.getItem(key)));
+      if (legacy) {
         const migrated = addMissingHistory(legacy);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
         return migrated;
@@ -176,6 +214,9 @@ const elements = {
   search: document.querySelector("#transaction-search"),
   category: document.querySelector("#category-filter"),
   date: document.querySelector("#transaction-date"),
+  backupData: document.querySelector("#backup-data"),
+  restoreData: document.querySelector("#restore-data"),
+  restoreFile: document.querySelector("#restore-file"),
   periodToolbar: document.querySelector(".period-toolbar"),
   periodTitle: document.querySelector("#period-title"),
   periodMeta: document.querySelector("#period-meta"),
@@ -490,19 +531,21 @@ function showToast(title, message, actionLabel = "", action = null) {
 
 function addTransaction(form) {
   const data = new FormData(form);
-  const transaction = {
-    id: `t-${Date.now()}`,
-    name: data.get("name").trim(),
-    note: data.get("note").trim(),
-    category: data.get("category"),
-    type: data.get("type"),
+  const type = String(data.get("type") ?? "");
+  const transaction = normalizeTransaction({
+    id: `t-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name: String(data.get("name") ?? ""),
+    note: String(data.get("note") ?? ""),
+    category: type === "income" ? "Income" : type === "savings" ? "Savings" : String(data.get("category") ?? ""),
+    type,
     amount: Number(data.get("amount")),
-    date: data.get("date"),
-  };
+    date: String(data.get("date") ?? ""),
+  });
 
-  if (!transaction.name || !transaction.date || !transaction.category || transaction.amount <= 0) return;
-  if (transaction.type === "income") transaction.category = "Income";
-  if (transaction.type === "savings") transaction.category = "Savings";
+  if (!transaction) {
+    showToast("Check transaction details", "Enter a valid name, category, date, and positive amount.");
+    return;
+  }
 
   state.transactions.push(transaction);
   state.selectedMonth = transaction.date.slice(0, 7);
@@ -535,8 +578,58 @@ function selectMonth(monthKey) {
 }
 
 function csvCell(value) {
-  const text = String(value ?? "");
+  let text = String(value ?? "");
+  if (typeof value === "string" && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
   return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+function downloadFile(contents, type, filename) {
+  const url = URL.createObjectURL(new Blob([contents], { type }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function backupData() {
+  const backup = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    transactions: state.transactions,
+  };
+  downloadFile(JSON.stringify(backup, null, 2), "application/json;charset=utf-8", `monea-backup-${todayKey}.json`);
+  showToast("Backup downloaded", `${state.transactions.length} transactions were saved to a JSON file.`);
+}
+
+async function restoreData(event) {
+  const [file] = event.target.files;
+  event.target.value = "";
+  if (!file) return;
+
+  try {
+    if (file.size > 2_000_000) throw new Error("Backup files must be smaller than 2 MB.");
+    const backup = JSON.parse(await file.text());
+    const backupTransactions = Array.isArray(backup)
+      ? backup
+      : backup && typeof backup === "object" ? backup.transactions : null;
+    const transactions = normalizeTransactionList(backupTransactions);
+    if (!transactions) throw new Error("This file is not a valid Monea backup.");
+
+    const confirmed = window.confirm(`Replace your current ${state.transactions.length} transactions with ${transactions.length} from this backup?`);
+    if (!confirmed) return;
+
+    state.transactions = transactions;
+    state.selectedMonth = transactions.length
+      ? transactions.map((transaction) => transaction.date.slice(0, 7)).sort().at(-1)
+      : currentMonth;
+    state.visibleLimit = 6;
+    saveTransactions();
+    renderAll();
+    showToast("Backup restored", `${transactions.length} transactions are now available.`);
+  } catch (error) {
+    showToast("Restore failed", error instanceof Error ? error.message : "The backup could not be read.");
+  }
 }
 
 function exportSelectedMonth() {
@@ -553,12 +646,7 @@ function exportSelectedMonth() {
     ["Remaining balance", balanceFromTotals(totals)],
   ];
   const csv = rows.map((row) => row.map(csvCell).join(",")).join("\n");
-  const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `monea-${state.selectedMonth}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
+  downloadFile(`\uFEFF${csv}`, "text/csv;charset=utf-8", `monea-${state.selectedMonth}.csv`);
   showToast("Monthly report exported", `${monthLabel(state.selectedMonth)} was downloaded as a CSV file.`);
 }
 
@@ -581,8 +669,12 @@ elements.form.addEventListener("submit", (event) => {
 
 document.querySelectorAll("[data-filter]").forEach((button) => {
   button.addEventListener("click", () => {
-    document.querySelectorAll("[data-filter]").forEach((item) => item.classList.remove("active"));
+    document.querySelectorAll("[data-filter]").forEach((item) => {
+      item.classList.remove("active");
+      item.setAttribute("aria-pressed", "false");
+    });
     button.classList.add("active");
+    button.setAttribute("aria-pressed", "true");
     state.typeFilter = button.dataset.filter;
     state.visibleLimit = 6;
     renderTransactions();
@@ -591,8 +683,12 @@ document.querySelectorAll("[data-filter]").forEach((button) => {
 
 document.querySelectorAll("[data-period]").forEach((button) => {
   button.addEventListener("click", () => {
-    document.querySelectorAll("[data-period]").forEach((item) => item.classList.remove("active"));
+    document.querySelectorAll("[data-period]").forEach((item) => {
+      item.classList.remove("active");
+      item.setAttribute("aria-pressed", "false");
+    });
     button.classList.add("active");
+    button.setAttribute("aria-pressed", "true");
     state.chartPeriod = button.dataset.period;
     renderChart();
   });
@@ -648,6 +744,9 @@ elements.nextMonth.addEventListener("click", () => selectMonth(offsetMonth(state
 elements.monthPicker.addEventListener("change", (event) => selectMonth(event.target.value));
 document.querySelector("#this-month").addEventListener("click", () => selectMonth(currentMonth));
 document.querySelector("#export-month").addEventListener("click", exportSelectedMonth);
+elements.backupData.addEventListener("click", backupData);
+elements.restoreData.addEventListener("click", () => elements.restoreFile.click());
+elements.restoreFile.addEventListener("change", restoreData);
 document.querySelector("#toast-action").addEventListener("click", () => {
   if (toastAction) toastAction();
   toastAction = null;

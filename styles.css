@@ -1033,6 +1033,17 @@ select:focus-visible {
   margin-bottom: 17px;
 }
 
+.transactions-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.data-button {
+  min-width: 0;
+  padding-inline: 12px;
+}
+
 .mobile-add {
   display: none;
 }
@@ -1802,7 +1813,7 @@ tr:hover .delete-button,
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 7px 12px;
-    padding: 14px 15px;
+    padding: 14px 50px 14px 15px;
     border-bottom: 1px solid var(--line);
   }
 
@@ -1840,7 +1851,8 @@ tr:hover .delete-button,
     position: absolute;
     top: 50%;
     right: 7px;
-    display: none;
+    display: block;
+    transform: translateY(-50%);
   }
 
   .delete-button {
@@ -1881,6 +1893,15 @@ tr:hover .delete-button,
 }
 
 @media (max-width: 430px) {
+  .data-button {
+    width: 42px;
+    padding: 0;
+  }
+
+  .data-button span {
+    display: none;
+  }
+
   .topbar > div:first-child > p:last-child {
     max-width: 220px;
   }

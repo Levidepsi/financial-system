@@ -146,9 +146,9 @@
                 <h2>Spending overview</h2>
               </div>
               <div class="segmented-control" aria-label="Spending chart period">
-                <button type="button" data-period="week">Week</button>
-                <button class="active" type="button" data-period="month">Month</button>
-                <button type="button" data-period="year">Year</button>
+                <button type="button" data-period="week" aria-pressed="false">Week</button>
+                <button class="active" type="button" data-period="month" aria-pressed="true">Month</button>
+                <button type="button" data-period="year" aria-pressed="false">Year</button>
               </div>
             </div>
             <div class="chart-summary">
@@ -193,18 +193,29 @@
               <p class="section-kicker">Activity</p>
               <h2 id="transactions-title">This month’s transactions</h2>
             </div>
-            <button class="secondary-button mobile-add" type="button" data-open-dialog>
-              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
-              Add
-            </button>
+            <div class="transactions-heading-actions">
+              <button class="secondary-button data-button" id="backup-data" type="button" aria-label="Download a backup of all transaction data">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 20h14" /></svg>
+                <span>Backup</span>
+              </button>
+              <button class="secondary-button data-button" id="restore-data" type="button" aria-label="Restore transaction data from a backup">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 21V9m0 0 5 5m-5-5-5 5M5 4h14" /></svg>
+                <span>Restore</span>
+              </button>
+              <input id="restore-file" type="file" accept="application/json,.json" hidden />
+              <button class="secondary-button mobile-add" type="button" data-open-dialog>
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+                Add
+              </button>
+            </div>
           </div>
 
           <div class="transaction-toolbar">
             <div class="transaction-tabs" role="group" aria-label="Filter by transaction type">
-              <button class="active" type="button" data-filter="all">All</button>
-              <button type="button" data-filter="expense">Expenses</button>
-              <button type="button" data-filter="income">Income</button>
-              <button type="button" data-filter="savings">Savings</button>
+              <button class="active" type="button" data-filter="all" aria-pressed="true">All</button>
+              <button type="button" data-filter="expense" aria-pressed="false">Expenses</button>
+              <button type="button" data-filter="income" aria-pressed="false">Income</button>
+              <button type="button" data-filter="savings" aria-pressed="false">Savings</button>
             </div>
             <div class="toolbar-actions">
               <label class="search-field">
