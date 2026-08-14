@@ -365,22 +365,23 @@ function renderTransactions() {
 
 function renderBudgets() {
   const expenses = transactionsForMonth().filter((transaction) => transaction.type === "expense");
+  const totals = getTotals();
   const budgets = budgetDefinitions.map((budget) => ({
     ...budget,
     spent: expenses
       .filter((transaction) => budget.categories.includes(transaction.category))
       .reduce((sum, transaction) => sum + Number(transaction.amount), 0),
   }));
-  const totalLimit = budgets.reduce((sum, budget) => sum + budget.limit, 0);
-  const totalSpent = budgets.reduce((sum, budget) => sum + budget.spent, 0);
-  const percent = totalLimit ? Math.round((totalSpent / totalLimit) * 100) : 0;
-  const remaining = totalLimit - totalSpent;
+  const availableIncome = totals.income - totals.savings;
+  const totalSpent = totals.expense;
+  const percent = availableIncome > 0 ? Math.round((totalSpent / availableIncome) * 100) : totalSpent > 0 ? 100 : 0;
+  const remaining = balanceFromTotals(totals);
   const score = document.querySelector(".budget-score");
 
   score.querySelector("strong").textContent = remaining >= 0 ? "You’re on track" : "Budget needs attention";
   score.querySelector("p").innerHTML = remaining >= 0
-    ? `<span id="budget-remaining">${shortCurrency.format(remaining)}</span> left across all budgets.`
-    : `<span id="budget-remaining">${shortCurrency.format(Math.abs(remaining))}</span> over your total budget.`;
+    ? `<span id="budget-remaining">${shortCurrency.format(remaining)}</span> left after savings and expenses.`
+    : `<span id="budget-remaining">${shortCurrency.format(Math.abs(remaining))}</span> over your available funds.`;
   document.querySelector(".budget-ring").style.setProperty("--progress", Math.min(percent, 100));
   document.querySelector(".budget-ring span").innerHTML = `${percent}<small>%</small>`;
 
@@ -878,9 +879,11 @@ document.querySelector("#toggle-balance").addEventListener("click", (event) => {
 });
 
 document.querySelector("#manage-budgets").addEventListener("click", () => {
-  const totalLimit = budgetDefinitions.reduce((sum, budget) => sum + budget.limit, 0);
-  const spent = getTotals().expense;
-  showToast("Monthly budget status", `${shortCurrency.format(Math.max(totalLimit - spent, 0))} remains in ${monthLabel(state.selectedMonth)}.`);
+  const remaining = balanceFromTotals(getTotals());
+  const message = remaining >= 0
+    ? `${shortCurrency.format(remaining)} remains in ${monthLabel(state.selectedMonth)}.`
+    : `${shortCurrency.format(Math.abs(remaining))} is over your available funds in ${monthLabel(state.selectedMonth)}.`;
+  showToast("Monthly budget status", message);
 });
 
 document.querySelectorAll('input[name="type"]').forEach((input) => {
