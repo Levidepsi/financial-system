@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Monea is a simple, elegant personal expense tracker." />
+    <title>Monea — Expense Tracker</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Primary navigation">
+        <a class="brand" href="#" aria-label="Monea dashboard">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M5 17.5V11m7 6.5v-11m7 11V3.5" /></svg>
+          </span>
+          <span>Monea</span>
+        </a>
+
+        <nav class="primary-nav">
+          <p class="nav-label">Workspace</p>
+          <a class="nav-link active" href="#overview" aria-current="page">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 13h6V4H4v9Zm0 7h6v-3H4v3Zm10 0h6v-9h-6v9Zm0-16v3h6V4h-6Z" /></svg>
+            Overview
+          </a>
+          <a class="nav-link" href="#transactions">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 7h13m0 0-3-3m3 3-3 3M17 17H4m0 0 3 3m-3-3 3-3" /></svg>
+            Transactions
+            <span class="nav-badge" id="transaction-count">10</span>
+          </a>
+          <a class="nav-link" href="#budgets">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9h-9V3Z" /><path d="M16 3.9A9 9 0 0 1 20.1 8H16V3.9Z" /></svg>
+            Budgets
+          </a>
+          <a class="nav-link" href="#insights">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m4 16 5-5 4 4 7-8" /><path d="M15 7h5v5" /></svg>
+            Insights
+          </a>
+        </nav>
+
+        <div class="sidebar-footer">
+          <button class="profile-button" type="button" aria-label="Open profile menu">
+            <span class="avatar">AS</span>
+            <span class="profile-copy">
+              <strong>Alex Smith</strong>
+              <small>Personal account</small>
+            </span>
+            <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></svg>
+          </button>
+        </div>
+      </aside>
+
+      <main id="main-content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" id="today-label">Friday, August 14</p>
+            <h1 id="greeting">Good morning, Alex.</h1>
+            <p>Here’s how your money is looking today.</p>
+          </div>
+          <div class="topbar-actions">
+            <button class="icon-button" type="button" aria-label="Notifications">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" /></svg>
+              <span class="notification-dot" aria-hidden="true"></span>
+            </button>
+            <button class="primary-button" type="button" data-open-dialog>
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+              Add transaction
+            </button>
+          </div>
+        </header>
+
+        <section class="period-toolbar" aria-label="Monthly reporting period">
+          <div class="period-copy">
+            <span>Viewing period</span>
+            <strong id="period-title">August 2026</strong>
+            <small id="period-meta">Your monthly data is saved automatically.</small>
+          </div>
+          <div class="period-controls">
+            <button class="period-arrow" id="previous-month" type="button" aria-label="View previous month">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" /></svg>
+            </button>
+            <label class="month-picker">
+              <span class="sr-only">Choose month</span>
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 4h14v17H5zM8 2v4m8-4v4M5 9h14" /></svg>
+              <input id="month-picker" type="month" />
+            </label>
+            <button class="period-arrow" id="next-month" type="button" aria-label="View next month">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></svg>
+            </button>
+            <button class="this-month-button" id="this-month" type="button">This month</button>
+          </div>
+          <button class="secondary-button export-button" id="export-month" type="button">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 20h14" /></svg>
+            Export CSV
+          </button>
+        </section>
+
+        <section class="dashboard" id="overview" aria-label="Financial overview">
+          <article class="balance-card">
+            <div class="balance-orb orb-one" aria-hidden="true"></div>
+            <div class="balance-orb orb-two" aria-hidden="true"></div>
+            <div class="balance-heading">
+              <div>
+                <span>Total balance</span>
+                <button class="visibility-button" type="button" id="toggle-balance" aria-label="Hide balance">
+                  <svg class="eye-open" aria-hidden="true" viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg>
+                  <svg class="eye-closed" aria-hidden="true" viewBox="0 0 24 24"><path d="m3 3 18 18M10.6 10.7A2 2 0 0 0 13.3 13.4M9.9 5.2A11.7 11.7 0 0 1 12 5c6.5 0 10 7 10 7a15.8 15.8 0 0 1-2.1 3M6.6 6.6C3.6 8.5 2 12 2 12s3.5 7 10 7a10.2 10.2 0 0 0 4.1-.8" /></svg>
+                </button>
+              </div>
+              <span class="trend-pill" id="balance-trend">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m7 14 5-5 5 5" /></svg>
+                0%
+              </span>
+            </div>
+            <p class="balance-value" id="balance-value">₱0.00</p>
+            <p class="balance-comparison" id="balance-formula">Income minus savings and expenses</p>
+            <div class="balance-breakdown">
+              <div>
+                <span class="mini-icon income-icon">
+                  <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 19V5m0 0L6 11m6-6 6 6" /></svg>
+                </span>
+                <span><small>Income after savings</small><strong id="income-total">₱0.00</strong></span>
+              </div>
+              <div>
+                <span class="mini-icon expense-icon">
+                  <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14m0 0 6-6m-6 6-6-6" /></svg>
+                </span>
+                <span><small>Expenses</small><strong id="expense-total">₱0.00</strong></span>
+              </div>
+              <div class="savings-summary">
+                <span class="mini-icon savings-icon">
+                  <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 10h14v10H5zM8 10V8a4 4 0 0 1 8 0v2M9 15h6" /></svg>
+                </span>
+                <span><small>Total savings</small><strong id="savings-total">₱0.00</strong></span>
+              </div>
+            </div>
+          </article>
+
+          <article class="card spending-card" id="insights">
+            <div class="card-header">
+              <div>
+                <p class="section-kicker">Analytics</p>
+                <h2>Spending overview</h2>
+              </div>
+              <div class="segmented-control" aria-label="Spending chart period">
+                <button type="button" data-period="week">Week</button>
+                <button class="active" type="button" data-period="month">Month</button>
+                <button type="button" data-period="year">Year</button>
+              </div>
+            </div>
+            <div class="chart-summary">
+              <div>
+                <span>Total spent</span>
+                <strong id="chart-total">₱0</strong>
+              </div>
+              <span class="comparison-positive" id="spending-comparison">Compared with last month</span>
+            </div>
+            <div class="chart-wrap">
+              <div class="chart-y-axis" id="chart-y-axis" aria-hidden="true">
+                <span>₱40k</span><span>₱30k</span><span>₱20k</span><span>₱10k</span><span>₱0</span>
+              </div>
+              <div class="bar-chart" id="spending-chart" role="img" aria-label="Monthly spending bar chart"></div>
+            </div>
+          </article>
+
+          <article class="card budget-card" id="budgets">
+            <div class="card-header">
+              <div>
+                <p class="section-kicker">Limits</p>
+                <h2>Monthly budgets</h2>
+              </div>
+              <button class="text-button" type="button" id="manage-budgets">Manage</button>
+            </div>
+            <div class="budget-score">
+              <div class="budget-ring" style="--progress: 68">
+                <span>68<small>%</small></span>
+              </div>
+              <div>
+                <strong>You’re on track</strong>
+                <p><span id="budget-remaining">₱0</span> left across all budgets.</p>
+              </div>
+            </div>
+            <div class="budget-list" id="budget-list"></div>
+          </article>
+        </section>
+
+        <section class="transactions-section" id="transactions" aria-labelledby="transactions-title">
+          <div class="transactions-heading">
+            <div>
+              <p class="section-kicker">Activity</p>
+              <h2 id="transactions-title">This month’s transactions</h2>
+            </div>
+            <button class="secondary-button mobile-add" type="button" data-open-dialog>
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+              Add
+            </button>
+          </div>
+
+          <div class="transaction-toolbar">
+            <div class="transaction-tabs" role="group" aria-label="Filter by transaction type">
+              <button class="active" type="button" data-filter="all">All</button>
+              <button type="button" data-filter="expense">Expenses</button>
+              <button type="button" data-filter="income">Income</button>
+              <button type="button" data-filter="savings">Savings</button>
+            </div>
+            <div class="toolbar-actions">
+              <label class="search-field">
+                <span class="sr-only">Search transactions</span>
+                <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
+                <input id="transaction-search" type="search" placeholder="Search transactions" autocomplete="off" />
+              </label>
+              <label class="select-field">
+                <span class="sr-only">Filter by category</span>
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 5h16M7 12h10m-7 7h4" /></svg>
+                <select id="category-filter">
+                  <option value="all">All categories</option>
+                  <option>Housing & Bills</option>
+                  <option>Shopping</option>
+                  <option>Debt Repayment</option>
+                  <option>Utilities</option>
+                  <option>Entertainment</option>
+                  <option>Health</option>
+                  <option>Income</option>
+                  <option>Savings</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div class="table-card">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Transaction</th>
+                  <th scope="col">Category</th>
+                  <th scope="col">Date</th>
+                  <th scope="col">Amount</th>
+                  <th scope="col"><span class="sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody id="transaction-list"></tbody>
+            </table>
+            <div class="empty-state" id="empty-state" hidden>
+              <span>
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16v13H4zM8 4h8v3M8 12h8M8 16h5" /></svg>
+              </span>
+              <h3>No transactions found</h3>
+              <p id="empty-message">Try a different filter or add a new transaction.</p>
+              <button class="primary-button" type="button" data-open-dialog>Add transaction</button>
+            </div>
+            <div class="table-footer">
+              <p id="table-summary">Showing 0 transactions</p>
+              <button class="text-button" type="button" id="view-all">View all transactions</button>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog class="transaction-dialog" id="transaction-dialog" aria-labelledby="dialog-title">
+      <form method="dialog" id="transaction-form">
+        <div class="dialog-header">
+          <div>
+            <p class="section-kicker">New entry</p>
+            <h2 id="dialog-title">Add transaction</h2>
+          </div>
+          <button class="icon-button close-button" type="button" data-close-dialog aria-label="Close dialog">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg>
+          </button>
+        </div>
+
+        <fieldset class="type-picker">
+          <legend>Transaction type</legend>
+          <label>
+            <input type="radio" name="type" value="expense" checked />
+            <span><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14m0 0 6-6m-6 6-6-6" /></svg>Expense</span>
+          </label>
+          <label>
+            <input type="radio" name="type" value="income" />
+            <span><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 19V5m0 0L6 11m6-6 6 6" /></svg>Income</span>
+          </label>
+          <label>
+            <input type="radio" name="type" value="savings" />
+            <span><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 10h14v10H5zM8 10V8a4 4 0 0 1 8 0v2M9 15h6" /></svg>Savings</span>
+          </label>
+        </fieldset>
+
+        <label class="form-field amount-field">
+          <span>Amount</span>
+          <div><span>₱</span><input id="amount" name="amount" type="number" min="0.01" step="0.01" placeholder="0.00" required /></div>
+        </label>
+
+        <div class="form-grid">
+          <label class="form-field">
+            <span>Name</span>
+            <input name="name" type="text" placeholder="e.g. Morning coffee" maxlength="60" required />
+          </label>
+          <label class="form-field">
+            <span>Category</span>
+            <select name="category" required>
+              <option value="">Select category</option>
+              <option>Housing & Bills</option>
+              <option>Shopping</option>
+              <option>Debt Repayment</option>
+              <option>Utilities</option>
+              <option>Entertainment</option>
+              <option>Health</option>
+              <option>Income</option>
+              <option>Savings</option>
+            </select>
+          </label>
+          <label class="form-field">
+            <span>Date</span>
+            <input id="transaction-date" name="date" type="date" required />
+          </label>
+          <label class="form-field">
+            <span>Note <small>Optional</small></span>
+            <input name="note" type="text" placeholder="Add a short note" maxlength="100" />
+          </label>
+        </div>
+
+        <div class="dialog-actions">
+          <button class="secondary-button" type="button" data-close-dialog>Cancel</button>
+          <button class="primary-button" type="submit">Save transaction</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite">
+      <span class="toast-icon">
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" /></svg>
+      </span>
+      <div><strong>Transaction added</strong><p>Your balance has been updated.</p></div>
+      <button class="toast-action" id="toast-action" type="button" hidden>Undo</button>
+    </div>
+  </body>
+</html>
