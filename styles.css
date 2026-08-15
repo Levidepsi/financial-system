@@ -1434,6 +1434,7 @@ tr:hover .delete-button,
 }
 
 .form-field > span,
+.category-field > label:first-child,
 .type-picker legend {
   color: #4e5c53;
   font-size: 10px;
@@ -1466,6 +1467,22 @@ tr:hover .delete-button,
   background: white;
   border-color: rgba(28, 92, 69, 0.55);
   box-shadow: 0 0 0 3px rgba(28, 92, 69, 0.08);
+}
+
+.custom-category-field {
+  display: grid;
+  gap: 7px;
+  margin-top: 3px;
+}
+
+.custom-category-field[hidden] {
+  display: none;
+}
+
+.custom-category-field > span {
+  color: #4e5c53;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .amount-field {

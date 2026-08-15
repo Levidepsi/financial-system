@@ -1,5 +1,17 @@
 const STORAGE_KEY = "monea-transactions-php-v3";
 const LEGACY_STORAGE_KEYS = ["monea-transactions-php-v2"];
+const CUSTOM_CATEGORIES_STORAGE_KEY = "monea-custom-categories-v1";
+const CUSTOM_CATEGORY_VALUE = "__custom__";
+
+const defaultExpenseCategories = [
+  "Housing & Bills",
+  "Shopping",
+  "Debt Repayment",
+  "Utilities",
+  "Entertainment",
+  "Health",
+];
+const builtInCategories = [...defaultExpenseCategories, "Income", "Savings"];
 
 const formatCurrency = new Intl.NumberFormat("en-PH", {
   style: "currency",
@@ -107,6 +119,21 @@ const categoryThemes = {
   Savings: { className: "savings", color: "#426d9d", bg: "#e7eff8", icon: '<path d="M5 10h14v10H5zM8 10V8a4 4 0 0 1 8 0v2M9 15h6" />' },
 };
 
+function normalizeCategoryName(value) {
+  if (typeof value !== "string") return "";
+  const category = value.trim().replace(/\s+/g, " ");
+  if (!category
+    || category.length > 40
+    || ["all", CUSTOM_CATEGORY_VALUE].includes(category.toLowerCase())
+    || /[\u0000-\u001f\u007f]/.test(category)) return "";
+  return builtInCategories.find((name) => name.toLowerCase() === category.toLowerCase()) ?? category;
+}
+
+function isCustomExpenseCategory(category) {
+  return category
+    && !builtInCategories.some((name) => name.toLowerCase() === category.toLowerCase());
+}
+
 function normalizeTransaction(item) {
   if (!item || typeof item !== "object") return null;
 
@@ -114,7 +141,7 @@ function normalizeTransaction(item) {
   const name = typeof item.name === "string" ? item.name.trim() : "";
   const note = typeof item.note === "string" ? item.note.trim() : "";
   const type = typeof item.type === "string" ? item.type : "";
-  const category = typeof item.category === "string" ? item.category : "";
+  const category = normalizeCategoryName(item.category);
   const amount = Number(item.amount);
   const date = typeof item.date === "string" ? item.date : "";
   const validDate = /^\d{4}-\d{2}-\d{2}$/.test(date)
@@ -125,8 +152,8 @@ function normalizeTransaction(item) {
     || !name || name.length > 60
     || note.length > 100
     || !["expense", "income", "savings"].includes(type)
-    || !Object.hasOwn(categoryThemes, category)
-    || (type === "expense" && ["Income", "Savings"].includes(category))
+    || !category
+    || (type === "expense" && ["income", "savings"].includes(category.toLowerCase()))
     || !Number.isFinite(amount) || amount <= 0 || amount > 999999999.99
     || !validDate) return null;
 
@@ -180,8 +207,34 @@ function loadTransactions() {
   return seeded;
 }
 
+function loadCustomCategories(transactions) {
+  let savedCategories = [];
+  try {
+    const saved = JSON.parse(localStorage.getItem(CUSTOM_CATEGORIES_STORAGE_KEY));
+    if (Array.isArray(saved)) savedCategories = saved;
+  } catch {
+    // Categories used by saved transactions are still recovered below.
+  }
+
+  const categories = [
+    ...savedCategories,
+    ...transactions
+      .filter((transaction) => transaction.type === "expense")
+      .map((transaction) => transaction.category),
+  ]
+    .map(normalizeCategoryName)
+    .filter(isCustomExpenseCategory);
+
+  return categories.filter((category, index) => (
+    categories.findIndex((item) => item.toLowerCase() === category.toLowerCase()) === index
+  ));
+}
+
+const initialTransactions = loadTransactions();
+
 const state = {
-  transactions: loadTransactions(),
+  transactions: initialTransactions,
+  customCategories: loadCustomCategories(initialTransactions),
   selectedMonth: currentMonth,
   typeFilter: "all",
   categoryFilter: "all",
@@ -223,6 +276,9 @@ const elements = {
   previousMonth: document.querySelector("#previous-month"),
   nextMonth: document.querySelector("#next-month"),
   transactionsTitle: document.querySelector("#transactions-title"),
+  formCategory: document.querySelector("#transaction-category"),
+  customCategory: document.querySelector("#custom-category"),
+  customCategoryField: document.querySelector("#custom-category-field"),
 };
 
 function saveTransactions() {
@@ -231,6 +287,63 @@ function saveTransactions() {
   } catch {
     showToast("Storage unavailable", "Changes will last only until this tab is closed.");
   }
+}
+
+function saveCustomCategories() {
+  try {
+    localStorage.setItem(CUSTOM_CATEGORIES_STORAGE_KEY, JSON.stringify(state.customCategories));
+  } catch {
+    showToast("Storage unavailable", "Custom categories will last only until this tab is closed.");
+  }
+}
+
+function registerCustomCategories(transactions) {
+  let changed = false;
+  transactions.forEach((transaction) => {
+    const category = normalizeCategoryName(transaction.category);
+    if (transaction.type !== "expense" || !isCustomExpenseCategory(category)) return;
+    if (state.customCategories.some((item) => item.toLowerCase() === category.toLowerCase())) return;
+    state.customCategories.push(category);
+    changed = true;
+  });
+  if (changed) saveCustomCategories();
+  return changed;
+}
+
+function canonicalAvailableCategoryName(value) {
+  const category = normalizeCategoryName(value);
+  return [...builtInCategories, ...state.customCategories]
+    .find((name) => name.toLowerCase() === category.toLowerCase()) ?? category;
+}
+
+function replaceCategoryOptions(select, options, fallbackValue) {
+  const currentValue = select.value;
+  select.replaceChildren(...options.map(({ label, value }) => new Option(label, value)));
+  select.value = options.some((option) => option.value === currentValue) ? currentValue : fallbackValue;
+}
+
+function renderCategoryOptions() {
+  const expenseCategories = [...defaultExpenseCategories, ...state.customCategories];
+  replaceCategoryOptions(elements.formCategory, [
+    { label: "Select category", value: "" },
+    ...expenseCategories.map((category) => ({ label: category, value: category })),
+    { label: "+ Add custom category", value: CUSTOM_CATEGORY_VALUE },
+    { label: "Income", value: "Income" },
+    { label: "Savings", value: "Savings" },
+  ], "");
+  replaceCategoryOptions(elements.category, [
+    { label: "All categories", value: "all" },
+    ...expenseCategories.map((category) => ({ label: category, value: category })),
+    { label: "Income", value: "Income" },
+    { label: "Savings", value: "Savings" },
+  ], "all");
+}
+
+function updateCustomCategoryField({ focus = false } = {}) {
+  const customSelected = elements.formCategory.value === CUSTOM_CATEGORY_VALUE;
+  elements.customCategoryField.hidden = !customSelected;
+  elements.customCategory.required = customSelected;
+  if (customSelected && focus) elements.customCategory.focus();
 }
 
 function sanitize(value) {
@@ -394,7 +507,7 @@ function renderBudgets() {
           <div class="budget-item-heading">
             <span class="budget-dot" style="background:${fillColor}"></span>
             <strong>${budget.category}</strong>
-            <span><b>${shortCurrency.format(budget.spent)}</b> / ${shortCurrency.format(budget.limit)}</span>
+            <span><b>${shortCurrency.format(budget.spent)}</b></span>
           </div>
           <div class="progress-track" role="progressbar" aria-label="${budget.category} budget used" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(budgetPercent)}">
             <div class="progress-fill" style="width:${Math.min(budgetPercent, 100)}%;background:${fillColor}"></div>
@@ -513,6 +626,7 @@ function openDialog() {
 function closeDialog() {
   elements.dialog.close();
   elements.form.reset();
+  updateCustomCategoryField();
 }
 
 let toastTimer;
@@ -532,11 +646,15 @@ function showToast(title, message, actionLabel = "", action = null) {
 function addTransaction(form) {
   const data = new FormData(form);
   const type = String(data.get("type") ?? "");
+  const selectedCategory = String(data.get("category") ?? "");
+  const category = type === "expense" && selectedCategory === CUSTOM_CATEGORY_VALUE
+    ? canonicalAvailableCategoryName(data.get("customCategory"))
+    : selectedCategory;
   const transaction = normalizeTransaction({
     id: `t-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     name: String(data.get("name") ?? ""),
     note: String(data.get("note") ?? ""),
-    category: type === "income" ? "Income" : type === "savings" ? "Savings" : String(data.get("category") ?? ""),
+    category: type === "income" ? "Income" : type === "savings" ? "Savings" : category,
     type,
     amount: Number(data.get("amount")),
     date: String(data.get("date") ?? ""),
@@ -548,9 +666,11 @@ function addTransaction(form) {
   }
 
   state.transactions.push(transaction);
+  const categoryAdded = registerCustomCategories([transaction]);
   state.selectedMonth = transaction.date.slice(0, 7);
   state.visibleLimit = 6;
   saveTransactions();
+  if (categoryAdded) renderCategoryOptions();
   renderAll();
   closeDialog();
   showToast("Transaction added", `${transaction.name} was saved to ${monthLabel(state.selectedMonth)}.`);
@@ -723,7 +843,7 @@ async function importCsv(event) {
       saving: "savings",
       savings: "savings",
     };
-    const categoryNames = Object.keys(categoryThemes);
+    const categoryNames = [...builtInCategories, ...state.customCategories];
     const existing = new Set(state.transactions.map(transactionFingerprint));
     const imported = [];
     let invalidCount = 0;
@@ -776,9 +896,11 @@ async function importCsv(event) {
     if (!confirmed) return;
 
     state.transactions.push(...imported);
+    const categoriesAdded = registerCustomCategories(imported);
     state.selectedMonth = imported.map((transaction) => transaction.date.slice(0, 7)).sort().at(-1);
     state.visibleLimit = 6;
     saveTransactions();
+    if (categoriesAdded) renderCategoryOptions();
     renderAll();
     showToast("CSV imported", `${imported.length} transactions added${skipped ? `; ${skipped} rows skipped` : ""}.`);
   } catch (error) {
@@ -888,12 +1010,15 @@ document.querySelector("#manage-budgets").addEventListener("click", () => {
 
 document.querySelectorAll('input[name="type"]').forEach((input) => {
   input.addEventListener("change", (event) => {
-    const category = elements.form.elements.category;
+    const category = elements.formCategory;
     if (event.target.value === "income") category.value = "Income";
     else if (event.target.value === "savings") category.value = "Savings";
     else if (["Income", "Savings"].includes(category.value)) category.value = "";
+    updateCustomCategoryField();
   });
 });
+
+elements.formCategory.addEventListener("change", () => updateCustomCategoryField({ focus: true }));
 
 elements.previousMonth.addEventListener("click", () => selectMonth(offsetMonth(state.selectedMonth, -1)));
 elements.nextMonth.addEventListener("click", () => selectMonth(offsetMonth(state.selectedMonth, 1)));
@@ -908,4 +1033,6 @@ document.querySelector("#toast-action").addEventListener("click", () => {
   toastAction = null;
 });
 
+renderCategoryOptions();
+updateCustomCategoryField();
 renderAll();

@@ -316,9 +316,9 @@
             <span>Name</span>
             <input name="name" type="text" placeholder="e.g. Morning coffee" maxlength="60" required />
           </label>
-          <label class="form-field">
-            <span>Category</span>
-            <select name="category" required>
+          <div class="form-field category-field">
+            <label for="transaction-category">Category</label>
+            <select id="transaction-category" name="category" required>
               <option value="">Select category</option>
               <option>Housing & Bills</option>
               <option>Shopping</option>
@@ -326,10 +326,15 @@
               <option>Utilities</option>
               <option>Entertainment</option>
               <option>Health</option>
+              <option value="__custom__">+ Add custom category</option>
               <option>Income</option>
               <option>Savings</option>
             </select>
-          </label>
+            <label class="custom-category-field" id="custom-category-field" for="custom-category" hidden>
+              <span>Custom category</span>
+              <input id="custom-category" name="customCategory" type="text" placeholder="e.g. Pet care" maxlength="40" autocomplete="off" />
+            </label>
+          </div>
           <label class="form-field">
             <span>Date</span>
             <input id="transaction-date" name="date" type="date" required />
