@@ -1033,6 +1033,14 @@ document.querySelector("#toast-action").addEventListener("click", () => {
   toastAction = null;
 });
 
+if ("serviceWorker" in navigator && window.location.protocol !== "file:") {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./service-worker.js").catch(() => {
+      // The app remains usable online when service-worker registration is unavailable.
+    });
+  });
+}
+
 renderCategoryOptions();
 updateCustomCategoryField();
 renderAll();
