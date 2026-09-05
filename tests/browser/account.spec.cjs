@@ -135,20 +135,23 @@ test("account plans fit a mobile screen", async ({ page, context }) => {
   expect(await page.locator("#account-dialog").evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
 });
 
-test("unused categories persist and no category limit blocks additional creation", async ({ page, context }) => {
+test("categories remain available through Add Transaction", async ({ page, context }) => {
   await guest(context);
   await page.goto("/");
   await expect(page.locator("#account-status")).toContainText("Saved on this device");
-  await page.locator(".category-manager summary").click();
-  for (const name of ["Salary", "Freelance", "Interest", "Gifts"]) {
-    await page.locator("#category-name").fill(name);
-    await page.locator("#add-category").click();
-    await expect(page.locator("#category-list")).toContainText(name);
-  }
+  await expect(page.locator(".category-manager")).toHaveCount(0);
+  await page.locator("[data-open-dialog]").first().click();
+  await page.locator('input[name="type"][value="income"]').check();
+  await page.locator("#amount").fill("100");
+  await page.locator('#transaction-form input[name="name"]').fill("Freelance work");
+  await page.locator('#transaction-category').selectOption('__custom__');
+  await page.locator('#custom-category').fill('Freelance');
+  await page.getByRole("button", { name: "Save transaction" }).click();
+  await expect(page.locator("#toast")).toContainText("Transaction added");
   await page.reload();
-  await page.locator(".category-manager summary").click();
-  await expect(page.locator("#category-list")).toContainText("Freelance");
-  await expect(page.locator("#add-category")).toBeEnabled();
+  await page.locator("[data-open-dialog]").first().click();
+  await page.locator('input[name="type"][value="income"]').check();
+  await expect(page.locator('#transaction-category option[value="Freelance"]')).toHaveCount(1);
 });
 
 test("accounts can create categories beyond old limits without any billing interface", async ({ page, context }) => {
@@ -156,10 +159,14 @@ test("accounts can create categories beyond old limits without any billing inter
   const account = await signedIn(context, [], "premium", categories);
   await page.goto("/");
   await expect(page.locator("#account-status")).toContainText("Synced to your account");
-  await page.locator(".category-manager summary").click();
-  await page.locator("#category-name").fill("More income");
-  await page.locator("#add-category").click();
-  await expect(page.locator("#category-list")).toContainText("More income");
+  await page.locator("[data-open-dialog]").first().click();
+  await page.locator('input[name="type"][value="income"]').check();
+  await page.locator("#amount").fill("100");
+  await page.locator('#transaction-form input[name="name"]').fill("Extra work");
+  await page.locator('#transaction-category').selectOption('__custom__');
+  await page.locator('#custom-category').fill('More income');
+  await page.getByRole("button", { name: "Save transaction" }).click();
+  await expect(page.locator("#toast")).toContainText("Transaction added");
   expect(account.categories).toHaveLength(8);
   await page.getByRole("button", { name: "Account", exact: true }).click();
   await expect(page.locator("#profile-plan")).toHaveText("Free access");

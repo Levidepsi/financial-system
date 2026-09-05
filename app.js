@@ -641,7 +641,6 @@ function renderAll() {
   renderBudgets();
   renderChart();
   renderAccountUsage();
-  renderCategoryManager();
 }
 
 function renderAccountUsage() {
@@ -657,15 +656,6 @@ function renderAccountUsage() {
   const expense = state.categories.filter((item) => item.type === "expense").length;
   status.textContent = account.mode === "guest" ? "Free · Saved on this device" : "Free · Synced to your account";
   usage.textContent = `${income} income categories · ${expense} expense categories · Unlimited categories and transactions.${account.mode === "guest" ? " Sign in to sync across devices." : ""}`;
-}
-
-function renderCategoryManager() {
-  const account = window.MoneaAccount;
-  document.querySelector("#add-category").disabled = !account || account.mode === "loading";
-  document.querySelector("#category-list").innerHTML = ["income", "expense"].map((kind) => {
-    const names = state.categories.filter((item) => item.type === kind).map((item) => sanitize(item.name));
-    return `<div><strong>${kind === "income" ? "Income" : "Expense"} categories (${names.length})</strong><p>${names.length ? names.join(" · ") : "No categories yet"}</p></div>`;
-  }).join("");
 }
 
 function defaultDateForSelectedMonth() {
@@ -1081,24 +1071,6 @@ document.querySelectorAll('input[name="type"]').forEach((input) => {
 });
 
 elements.formCategory.addEventListener("change", () => updateCustomCategoryField({ focus: true }));
-
-document.querySelector("#category-type").addEventListener("change", renderCategoryManager);
-document.querySelector("#category-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const category = CategoryPolicy.normalize(document.querySelector("#category-type").value, document.querySelector("#category-name").value);
-  if (!category) { showToast("Invalid category", "Enter a category name of up to 40 characters."); return; }
-  const account = window.MoneaAccount;
-  try {
-    if (account?.mode === "account") await account.createCategory(category);
-    else if (!await saveTransactions(state.transactions, [category])) return;
-    document.querySelector("#category-name").value = "";
-    renderCategoryOptions();
-    renderAll();
-    showToast("Category ready", `${category.name} is available for ${category.type} transactions.`);
-  } catch (error) {
-    showToast("Category not added", error.message);
-  }
-});
 
 document.querySelector("#export-history").addEventListener("click", async () => {
   const account = window.MoneaAccount;
