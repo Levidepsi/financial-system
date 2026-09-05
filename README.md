@@ -1,78 +1,43 @@
-# Monea
+﻿# Perfi
 
-Personal finance tracker with a local demo, email sign-in, account-scoped cloud storage, loan payment status, and Stripe subscriptions.
+Perfi is free for everyone. Income categories, expense categories, transactions, dashboards, monthly reports, and full-history CSV exports have no subscription limits. No payment is required.
 
-| Plan | Monthly price | Income categories | Expense categories |
-| --- | --- | --- | --- |
-| Free (not subscribed) | $0 | 2 | 5 |
-| Normal | $1 USD | 2 | 5 |
-| Premium | $5 USD | Unlimited | Unlimited |
+Email sign-in, sign-out, account ownership, and cross-device data syncing remain enabled. Guests can use all features locally, including full-history export. Sign in to save financial data to an account.
 
-All plans, including unsubscribed accounts, allow unlimited transactions within their categories. Category limits apply to the entire account and never reset monthly. Savings entries do not consume income/expense category slots. The basic dashboard and monthly CSV reports remain available to everyone; Premium also includes a server-protected full-history CSV report. The public comparison page is `/pricing.html`.
+## Database update required
 
-Normal is an optional paid plan with the same limits as Free; no additional Free transaction cap is applied. A subscription's expiration, cancellation, or downgrade never deletes categories or transactions. Users above a category limit can keep recording transactions in their existing categories, but cannot create additional categories of that type. Empty categories count, and deleting transactions does not delete their categories.
+Apply supabase/migrations/003_free_access.sql in the Supabase SQL Editor before deploying this version. It removes database category quotas without deleting accounts, categories, transactions, or historical billing records. It retains validation, ownership protections, and revision checks against concurrent edits.
 
-Frontend limits disable Add Category and display the income/expense-specific limit message with Upgrade to Premium. The API derives ownership from the verified session, and the database checks the subscription and locks the account row before creating a category. The same checks protect category creation through transaction saves, CSV imports, and backup restores. A failed batch rolls back all newly-created categories and transactions. Category names are case-insensitive within each type; income and expense categories are separate.
+For an existing installation, apply only migrations that have not already been applied. Migration 003 requires 001_accounts_and_billing.sql and 002_category_limits.sql. For a new project, run 001, 002, and then 003 in order. The earlier migrations describe the historical paid system; 003 establishes the current free behavior.
+
+The app cannot run this migration through a Supabase service-role API key alone. Use the SQL Editor or a direct database connection.
 
 ## Run locally
 
-Use Node.js 22 or later:
+Use Node.js 22 or later. Run npm ci, then npm run dev, and open http://127.0.0.1:5500. Restart the server after code changes.
 
-```sh
-npm ci
-npm run dev
-```
+Copy .env.example to .env.local and set APP_URL, SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY. The public key is used for email sign-in; the service-role key stays on the server. Stripe keys are not needed. The server serves only the files built into dist.
 
-Open `http://127.0.0.1:5500`. The server builds and serves only `dist/`; secrets and server files are never part of the public output. Restart it after code changes. Without service credentials the local demo remains available, and billing buttons are disabled. The demo mirrors Free's category limits. Existing local arrays are migrated to a ledger containing both transactions and persistent categories on the next save, preserving all existing data. Local-only storage is editable by its device owner; server enforcement applies to signed-in accounts.
+Enable email sign-in in Supabase. Configure its Site URL and redirect allowlist for your production origin and http://127.0.0.1:5500/ when developing locally. Sign-in links use PKCE and should be opened in the browser that requested them. Configure production email delivery before inviting users.
 
-## Configure accounts
+## Accounts and data
 
-1. Create a Supabase project and run `supabase/migrations/001_accounts_and_billing.sql`, then `supabase/migrations/002_category_limits.sql` in its SQL Editor once, in that order. **For an existing installation, run only the new `002_category_limits.sql`.** It preserves existing ledgers, backfills their categories (including those above the new limits), replaces transaction-count restrictions, and adds billing details. Apply it before deploying the updated app/API. After upgrading, replay the latest Stripe subscription event to populate billing details for existing subscriptions, or wait for the next subscription update.
-2. Enable email sign-in. Configure the Site URL and allowed redirect URLs to include your production origin and `http://127.0.0.1:5500/` for local testing. Use a production SMTP provider before inviting real users.
-3. Copy `.env.example` to `.env.local`. Fill in `SUPABASE_URL`, the public `SUPABASE_ANON_KEY`, and the server-only `SUPABASE_SERVICE_ROLE_KEY`.
-4. Set `APP_URL` to your app origin. The local server loads `.env.local`; Vercel needs the same values in its environment settings.
+The API verifies the session and derives the user ID from it. Browser roles cannot directly edit account tables or privileged database functions. Making features free does not make financial data public.
 
-Sign-in links use PKCE and should be opened in the browser that requested them. The server verifies access tokens with Supabase `getUser()` and derives the account ID from the verified user, never from the request body. Database tables and RPC functions are inaccessible to browser roles; only the server service role can access them.
+New accounts start empty. Existing local data stays on the device; export a monthly CSV and import it after signing in to migrate it. Signing out clears cloud data from the page. Cloud data is never stored in the guest ledger or service-worker cache.
 
-New signed-in accounts start empty. Local browser entries are never automatically attached to an email account. To migrate them, export a monthly CSV from the local demo, sign in, and import it within your plan's category limits. Cloud data is held in memory, never saved to the shared guest ledger or service-worker cache. Signing out clears it from the page. Account changes in another tab also clear the previous account's view.
+Category names are case-insensitive within each transaction type. Empty categories are retained, and deleting a transaction does not delete its category. Existing browser ledgers are preserved and migrated when saved.
 
-## Configure Stripe
+Revision checks prevent stale sessions from overwriting newer changes. Other tabs refresh after changes; visible sessions also refresh every 30 seconds and when returning to focus or reconnecting. Cloud writes require a connection and never silently fall back to local storage.
 
-Start in Stripe test mode:
+## Billing disabled
 
-1. Create two products with recurring, fixed USD prices: **Normal, $1 monthly** and **Premium, $5 monthly**. Set the corresponding `price_...` IDs in `STRIPE_NORMAL_PRICE_ID` and `STRIPE_PREMIUM_PRICE_ID`.
-2. Set `STRIPE_SECRET_KEY` to the secret key for that same Stripe environment. The server verifies that the selected price is active, USD, monthly, and exactly $1 or $5 before opening Checkout.
-3. Enable the Stripe customer portal with payment-method updates, cancellation, and switching between **only these two products/prices**. For paid upgrades, configure immediate invoicing; schedule downgrades for the end of the current period if desired. The app's Manage subscription button opens this portal.
-4. Add a webhook endpoint at `https://YOUR_DOMAIN/api/stripe/webhook`, listening for `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`. Copy its signing secret to `STRIPE_WEBHOOK_SECRET`.
-5. For local webhook testing, use the Stripe CLI:
+Checkout, billing-portal, and webhook routes return HTTP 410, even if old Stripe credentials remain configured. The interface has no prices, upgrades, billing forms, or locked reports. The old pricing.html URL now explains that all features are free.
 
-```sh
-stripe listen --events customer.subscription.created,customer.subscription.updated,customer.subscription.deleted --forward-to http://127.0.0.1:5500/api/stripe/webhook
-```
-
-Use the CLI's signing secret in `.env.local` while forwarding locally. Restart the local server after changing environment variables.
-
-Paid-plan access is granted only for a recognized price on an `active` subscription whose billing period has not expired. Pending, past-due, canceled, unknown-price, and expired subscriptions use Free's category limits and retain all their data. A Checkout return URL cannot grant access. Verified webhooks retrieve current Stripe subscription state, map its customer to the stored account, and update the database; duplicate/older events cannot overwrite newer subscription records. Do not disable webhook delivery: renewal needs to extend the recorded period end. Account settings show the effective plan, subscription status, renewal/access-end date, and recorded recurring plan amount; actual invoices are available in the Stripe portal.
-
-An existing subscription must be changed through the portal instead of creating a second subscription. Repeated checkout requests share an idempotency key and a one-hour database reservation. If a checkout for one plan is already open, complete it or let it expire before choosing the other plan.
-
-## Deploy and verify payments
-
-Vercel is configured to build the static app and route `/api/*` to the Node API. Add all environment values, apply the Supabase migration, configure redirects and the webhook, then deploy. Use separate test and live Stripe prices, keys, and webhook secrets. Keep `.env.local` out of source control.
-
-Before enabling live billing, test both subscriptions through the app with Stripe test payment details, payment failure, renewal, upgrade/downgrade, and cancellation. Confirm the webhook returns 200 and Refresh status shows the correct plan. These external checks require your configured Stripe and Supabase projects; local tests do not create customers, subscriptions, emails, or charges.
+Historical billing records are retained for reference. Disabling app billing endpoints does not cancel any subscriptions that might already exist in an external Stripe account; any such subscriptions must be canceled there separately.
 
 ## Verification
 
-```sh
-npm run check
-npm test
-npm run build
-npm run test:browser
-```
+Run npm run check, npm test, npm run build, and npm run test:browser. Browser tests use installed Google Chrome in headless mode and mocked account services. Database tests use PGlite. Tests cover authentication and ownership, data preservation, unlimited free categories, concurrent writes, disabled billing, and free report exports. Historical migration tests still verify the earlier migration chain separately from the free-access migration.
 
-Database tests execute the migration in an in-memory PostgreSQL runtime (PGlite). They check quotas, batch imports, stale writes, cancellation, downgrade, customer ownership, checkout reservations, and browser-role restrictions. API tests check verified identities, signature verification, price mapping, and validation. Browser tests use installed Google Chrome in headless mode with mocked account services.
-
-Cloud writes use revision checks to prevent one session overwriting another; a conflict refreshes the ledger and asks the user to retry while preserving an open transaction form. Same-browser updates notify other tabs; visible sessions also refresh every 30 seconds and when coming back online or into focus. Cloud writes require a connection and never silently fall back to guest storage. The current storage model sends the ledger as one document, with a 4 MB request safety limit; very large ledgers will need paginated transaction storage.
-
-Implementation references: [Stripe subscription webhooks](https://docs.stripe.com/billing/subscriptions/webhooks), [Stripe signature verification](https://docs.stripe.com/webhooks/signature), [Stripe customer portal](https://docs.stripe.com/customer-management/integrate-customer-portal), [Supabase getUser](https://supabase.com/docs/reference/javascript/auth-getuser), and [Vercel Node request bodies](https://vercel.com/docs/functions/runtimes/node-js#request-body).
+The ledger is currently sent as one document, with a 4 MB request safety limit; very large ledgers will need paginated storage. This is a transport limit, not a subscription quota.

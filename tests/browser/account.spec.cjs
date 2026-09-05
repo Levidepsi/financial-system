@@ -42,8 +42,6 @@ async function signedIn(context, transactions = [], plan = "normal", categories 
     const body = route.request().postDataJSON();
     if (body.revision !== account.revision) return route.fulfill({ status: 409, json: { error: "Another session changed your data." } });
     const proposed = CategoryPolicy.merge(account.categories, [body]);
-    try { CategoryPolicy.check(account.categories, proposed, account.plan); }
-    catch (error) { return route.fulfill({ status: 403, json: { error: error.message } }); }
     account.categories = proposed;
     account.revision += 1;
     return route.fulfill({ json: account });
@@ -51,16 +49,16 @@ async function signedIn(context, transactions = [], plan = "normal", categories 
   return account;
 }
 
-test("shows exact plan prices and disabled checkout until configured", async ({ page, context }) => {
+test("free account screen contains no pricing or upgrade controls", async ({ page, context }) => {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await guest(context);
   await page.goto("/");
-  await expect(page.locator("#account-status")).toContainText("Local demo");
-  await page.getByRole("button", { name: "Account & plans", exact: true }).click();
+  await expect(page.locator("#account-status")).toContainText("Saved on this device");
+  await page.getByRole("button", { name: "Account", exact: true }).click();
   await expect(page.locator("#account-dialog")).toBeVisible();
-  await expect(page.locator(".plan-price")).toHaveText(["$1 USD / month", "$5 USD / month"]);
-  await expect(page.getByRole("button", { name: "Choose Premium" })).toBeDisabled();
+  await expect(page.locator(".plan-price, [data-subscribe], #manage-subscription")).toHaveCount(0);
+  await expect(page.locator("#account-dialog")).toContainText("No subscription or payment required");
   await expect(page.locator("#sign-in-form")).toBeHidden();
   expect(errors).toEqual([]);
 });
@@ -68,10 +66,10 @@ test("shows exact plan prices and disabled checkout until configured", async ({ 
 test("loan paid state updates in another open tab and survives reload", async ({ page, context }) => {
   await guest(context, [entry("Loan")]);
   await page.goto("/");
-  await expect(page.locator("#account-status")).toContainText("Local demo");
+  await expect(page.locator("#account-status")).toContainText("Saved on this device");
   const second = await context.newPage();
   await second.goto("/");
-  await expect(second.locator("#account-status")).toContainText("Local demo");
+  await expect(second.locator("#account-status")).toContainText("Saved on this device");
   await second.getByRole("button", { name: "Paid loans", exact: true }).click();
   await page.getByRole("button", { name: "Mark paid: Loan", exact: true }).click();
   await expect(second.locator("#transaction-list")).toContainText("Loan");
@@ -82,7 +80,7 @@ test("loan paid state updates in another open tab and survives reload", async ({
 test("unsubscribed users can add more than five transactions within an existing category", async ({ page, context }) => {
   await guest(context, Array.from({ length: 5 }, (_, i) => entry(`Income${i}`, "income")));
   await page.goto("/");
-  await expect(page.locator("#account-status")).toContainText("Local demo");
+  await expect(page.locator("#account-status")).toContainText("Saved on this device");
   await page.locator("[data-open-dialog]").first().click();
   await page.locator('input[name="type"][value="income"]').check();
   await page.locator("#amount").fill("100");
@@ -96,25 +94,25 @@ test("unsubscribed users can add more than five transactions within an existing 
 test("cloud saves update other sessions without copying account data to guest storage", async ({ page, context }) => {
   const account = await signedIn(context, [entry("PrivateLoan")]);
   await page.goto("/");
-  await expect(page.locator("#account-status")).toContainText("Normal");
+  await expect(page.locator("#account-status")).toContainText("Synced to your account");
   const second = await context.newPage();
   await second.goto("/");
-  await expect(second.locator("#account-status")).toContainText("Normal");
+  await expect(second.locator("#account-status")).toContainText("Synced to your account");
   await second.getByRole("button", { name: "Paid loans", exact: true }).click();
   await page.getByRole("button", { name: "Mark paid: PrivateLoan", exact: true }).click();
   await expect(second.locator("#transaction-list")).toContainText("PrivateLoan");
   expect(account.transactions[0].paid).toBe(true);
   expect(await page.evaluate((key) => localStorage.getItem(key), KEY)).toBe("[]");
-  await page.getByRole("button", { name: "Account & plans", exact: true }).click();
+  await page.getByRole("button", { name: "Account", exact: true }).click();
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
-  await expect(page.locator("#account-status")).toContainText("Local demo");
+  await expect(page.locator("#account-status")).toContainText("Saved on this device");
   await expect(page.locator("#transaction-list")).not.toContainText("PrivateLoan");
 });
 
 test("a stale cloud save loads newer data and preserves the user's form", async ({ page, context }) => {
   const account = await signedIn(context);
   await page.goto("/");
-  await expect(page.locator("#account-status")).toContainText("Normal");
+  await expect(page.locator("#account-status")).toContainText("Synced to your account");
   await page.locator("[data-open-dialog]").first().click();
   await page.locator("#amount").fill("10");
   await page.locator('#transaction-form input[name="name"]').fill("My expense");
@@ -132,32 +130,17 @@ test("account plans fit a mobile screen", async ({ page, context }) => {
   await guest(context);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  await page.getByRole("button", { name: "Account & plans", exact: true }).click();
+  await page.getByRole("button", { name: "Account", exact: true }).click();
   await expect(page.locator("#account-dialog")).toBeVisible();
   expect(await page.locator("#account-dialog").evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
 });
 
-test("Normal blocks Add Category at both limits with exact messages and upgrade action", async ({ page, context }) => {
-  const categories = [...Array.from({ length: 2 }, (_, i) => ({ type: "income", name: `Income ${i}` })),
-    ...Array.from({ length: 5 }, (_, i) => ({ type: "expense", name: `Expense ${i}` }))];
-  await signedIn(context, [], "normal", categories);
-  await page.goto("/");
-  await expect(page.locator("#account-status")).toContainText("Normal");
-  await page.locator(".category-manager summary").click();
-  await expect(page.locator("#add-category")).toBeDisabled();
-  await expect(page.locator("#category-limit-message")).toHaveText("You have reached the 2-income-category limit for the Normal plan.");
-  await page.locator("#category-type").selectOption("expense");
-  await expect(page.locator("#category-limit-message")).toHaveText("You have reached the 5-expense-category limit for the Normal plan.");
-  await page.locator("#category-upgrade").click();
-  await expect(page.locator("#account-dialog")).toBeVisible();
-});
-
-test("unused categories persist and count toward Free limits after reload", async ({ page, context }) => {
+test("unused categories persist and no category limit blocks additional creation", async ({ page, context }) => {
   await guest(context);
   await page.goto("/");
-  await expect(page.locator("#account-status")).toContainText("Local demo");
+  await expect(page.locator("#account-status")).toContainText("Saved on this device");
   await page.locator(".category-manager summary").click();
-  for (const name of ["Salary", "Freelance"]) {
+  for (const name of ["Salary", "Freelance", "Interest", "Gifts"]) {
     await page.locator("#category-name").fill(name);
     await page.locator("#add-category").click();
     await expect(page.locator("#category-list")).toContainText(name);
@@ -165,43 +148,69 @@ test("unused categories persist and count toward Free limits after reload", asyn
   await page.reload();
   await page.locator(".category-manager summary").click();
   await expect(page.locator("#category-list")).toContainText("Freelance");
-  await expect(page.locator("#add-category")).toBeDisabled();
+  await expect(page.locator("#add-category")).toBeEnabled();
 });
 
-test("Premium creates categories above both Normal limits and shows billing details", async ({ page, context }) => {
+test("accounts can create categories beyond old limits without any billing interface", async ({ page, context }) => {
   const categories = Array.from({ length: 7 }, (_, i) => ({ type: "income", name: `Income ${i}` }));
   const account = await signedIn(context, [], "premium", categories);
   await page.goto("/");
-  await expect(page.locator("#account-status")).toContainText("Premium");
+  await expect(page.locator("#account-status")).toContainText("Synced to your account");
   await page.locator(".category-manager summary").click();
   await page.locator("#category-name").fill("More income");
   await page.locator("#add-category").click();
   await expect(page.locator("#category-list")).toContainText("More income");
   expect(account.categories).toHaveLength(8);
-  await page.getByRole("button", { name: "Account & plans", exact: true }).click();
-  await expect(page.locator("#billing-plan")).toHaveText("Premium");
-  await expect(page.locator("#billing-amount")).toContainText("$5.00 USD / month");
-  await expect(page.locator("#billing-date")).toContainText("2099");
-  await expect(page.locator("#billing-status")).toHaveText("active");
-});
-
-test("pricing page compares category limits, uses supplied descriptions, and fits mobile", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/pricing.html");
-  await expect(page.getByText("Simple tracking for personal finances. Includes up to 2 income categories and 5 expense categories.")).toBeVisible();
-  await expect(page.getByText("Complete financial tracking with unlimited income and expense categories.")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Choose Premium" })).toHaveAttribute("href", "/?plan=premium");
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole("button", { name: "Account", exact: true }).click();
+  await expect(page.locator("#profile-plan")).toHaveText("Free access");
+  await expect(page.locator(".billing-summary, [data-subscribe]")).toHaveCount(0);
 });
 
 test("simultaneous local saves cannot silently overwrite the first transaction", async ({ page, context }) => {
   await guest(context);
   await page.goto("/");
-  await expect(page.locator("#account-status")).toContainText("Local demo");
+  await expect(page.locator("#account-status")).toContainText("Saved on this device");
   const saved = await page.evaluate(async ({ first, second }) => {
     const outcomes = await Promise.all([saveTransactions([first]), saveTransactions([second])]);
     return outcomes;
   }, { first: entry("first"), second: entry("second") });
   expect(saved.filter(Boolean)).toHaveLength(1);
   expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)).transactions.length, KEY)).toBe(1);
+});
+
+test("guests can download the full-history report for free", async ({ page, context }) => {
+  await guest(context, [entry("My loan")]);
+  await page.goto("/");
+  await expect(page.locator("#account-status")).toContainText("Saved on this device");
+  const downloaded = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Full-history CSV", exact: true }).click();
+  expect((await downloaded).suggestedFilename()).toContain("perfi-full-history-");
+  await expect(page.locator("#account-dialog")).toBeHidden();
+});
+
+test("old pricing URL explains free access without paid plans", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/pricing.html");
+  await expect(page.getByRole("heading", { name: "Your finances. All features. Free." })).toBeVisible();
+  await expect(page.getByText("No subscription or payment required.")).toBeVisible();
+  await expect(page.locator('[href*="plan="], .plan-price')).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test("email sign-in remains available without Stripe configuration", async ({ page, context }) => {
+  await context.route("**/api/config", route => route.fulfill({ json: {
+    configured: true, billingConfigured: false, supabaseUrl: "https://example.supabase.co", supabaseAnonKey: "public",
+  } }));
+  let requestedEmail;
+  await context.route("https://example.supabase.co/auth/v1/otp**", route => {
+    requestedEmail = route.request().postDataJSON().email;
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Account", exact: true }).click();
+  await expect(page.locator("#sign-in-form")).toBeVisible();
+  await page.locator("#account-email").fill("member@example.com");
+  await page.getByRole("button", { name: "Email me a sign-in link" }).click();
+  await expect(page.locator("#account-message")).toContainText("Check your email");
+  expect(requestedEmail).toBe("member@example.com");
 });

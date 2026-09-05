@@ -1,7 +1,7 @@
 (function (root) {
-  const limits = { income: 2, expense: 5 };
+  const types = ["income", "expense"];
   function normalize(type, value) {
-    if (!Object.hasOwn(limits, type) || typeof value !== "string") return null;
+    if (!types.includes(type) || typeof value !== "string") return null;
     const name = value.trim().replace(/\s+/g, " ");
     if (!name || name.length > 40 || /[\u0000-\u001f\u007f]/.test(value)
       || ["all", "__custom__", "savings"].includes(name.toLowerCase())
@@ -18,20 +18,9 @@
     return [...categories.values()];
   }
   function fromTransactions(transactions) {
-    return transactions.filter((item) => Object.hasOwn(limits, item.type)).map((item) => ({ type: item.type, name: item.category }));
+    return transactions.filter((item) => types.includes(item.type)).map((item) => ({ type: item.type, name: item.category }));
   }
-  function message(type, plan) {
-    return `You have reached the ${limits[type]}-${type}-category limit for the ${plan === "normal" ? "Normal" : "Free"} plan.`;
-  }
-  function check(existing, proposed, plan) {
-    if (plan === "premium") return;
-    const known = new Set(existing.map(key));
-    for (const type of Object.keys(limits)) {
-      const all = proposed.filter((item) => item.type === type);
-      if (all.length > limits[type] && all.some((item) => !known.has(key(item)))) throw new Error(message(type, plan));
-    }
-  }
-  const policy = { limits, normalize, key, merge, fromTransactions, message, check };
+  const policy = { normalize, key, merge, fromTransactions };
   if (typeof module !== "undefined" && module.exports) module.exports = policy;
   else root.CategoryPolicy = policy;
 })(globalThis);

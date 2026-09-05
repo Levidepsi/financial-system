@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Monea is a simple, elegant personal expense tracker." />
     <meta name="theme-color" content="#f7f7f2" />
-    <title>Monea — Expense Tracker</title>
+    <title>Perfi</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="stylesheet" href="styles.css" />
@@ -47,7 +47,7 @@
         </nav>
 
         <div class="sidebar-footer">
-          <button class="profile-button" type="button" data-open-account aria-label="Open account and subscription">
+          <button class="profile-button" type="button" data-open-account aria-label="Open account">
             <span class="avatar">FU</span>
             <span class="profile-copy">
               <strong id="profile-name">Financial User</strong>
@@ -63,7 +63,7 @@
           <div>
             <p class="eyebrow" id="today-label">Friday, August 14</p>
             <h1 id="greeting">Good morning, Welcome to Perfi.</h1>
-            <p>Here’s how your money is looking today.</p>
+            <p>Here’s  your money is looking today.</p>
           </div>
           <div class="topbar-actions">
             <button class="icon-button" type="button" aria-label="Notifications">
@@ -77,9 +77,9 @@
           </div>
         </header>
 
-        <section class="account-banner" aria-label="Account and subscription">
+        <section class="account-banner" aria-label="Account">
           <div><strong id="account-status">Loading account…</strong><p id="account-usage">Your existing browser data stays on this device.</p></div>
-          <button class="secondary-button" type="button" data-open-account>Account &amp; plans</button>
+          <button class="secondary-button" type="button" data-open-account>Account</button>
         </section>
 
         <details class="category-manager">
@@ -88,10 +88,8 @@
           <form id="category-form" class="category-create-form">
             <label class="form-field"><span>Category type</span><select id="category-type"><option value="income">Income</option><option value="expense">Expense</option></select></label>
             <label class="form-field"><span>Category name</span><input id="category-name" maxlength="40" required placeholder="e.g. Salary or Groceries" /></label>
-            <button class="primary-button" id="add-category" type="submit" aria-describedby="category-limit-message">Add Category</button>
+            <button class="primary-button" id="add-category" type="submit">Add Category</button>
           </form>
-          <p id="category-limit-message" class="category-limit" role="status" aria-live="polite"></p>
-          <button id="category-upgrade" class="secondary-button" type="button" data-open-account hidden>Upgrade to Premium</button>
         </details>
 
         <section class="period-toolbar" aria-label="Monthly reporting period">
@@ -118,7 +116,7 @@
             <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 20h14" /></svg>
             Export CSV
           </button>
-          <button class="secondary-button" id="export-history" type="button">Full-history CSV · Premium</button>
+          <button class="secondary-button" id="export-history" type="button">Full-history CSV</button>
         </section>
 
         <section class="dashboard" id="overview" aria-label="Financial overview">
@@ -361,8 +359,6 @@
               <span>Custom category</span>
               <input id="custom-category" name="customCategory" type="text" placeholder="e.g. Pet care" maxlength="40" autocomplete="off" />
             </label>
-            <p id="transaction-category-limit" class="category-limit" role="status" aria-live="polite"></p>
-            <button id="transaction-upgrade" class="text-button" type="button" data-open-account hidden>Upgrade to Premium</button>
           </div>
           <label class="form-field">
             <span>Date</span>
@@ -384,40 +380,17 @@
     <dialog class="transaction-dialog account-dialog" id="account-dialog" aria-labelledby="account-title">
       <div class="account-dialog-content">
         <div class="dialog-header">
-          <div><p class="section-kicker">Your account</p><h2 id="account-title">Account &amp; plans</h2></div>
+          <div><p class="section-kicker">Your account</p><h2 id="account-title">Account</h2></div>
           <button class="icon-button close-button" type="button" id="close-account" aria-label="Close account dialog">×</button>
         </div>
         <p id="account-message" role="status" aria-live="polite">Loading account settings…</p>
-        <dl class="billing-summary">
-          <div><dt>Current plan</dt><dd id="billing-plan">Free</dd></div>
-          <div><dt>Subscription status</dt><dd id="billing-status">Not subscribed</dd></div>
-          <div><dt id="billing-date-label">Renewal date</dt><dd id="billing-date">No renewal scheduled</dd></div>
-          <div><dt>Plan billing amount</dt><dd id="billing-amount">$0 — Free</dd></div>
-        </dl>
-        <p class="plan-note">Plan amount before any tax, discounts, or prorated changes. View invoices in Manage subscription.</p>
+        <p class="plan-note">Unlimited categories, transactions, dashboards, and reports. No subscription or payment required.</p>
         <form id="sign-in-form" hidden>
           <label class="form-field"><span>Email address</span><input id="account-email" type="email" autocomplete="email" required maxlength="254" /></label>
           <button class="primary-button" type="submit">Email me a sign-in link</button>
         </form>
-        <div class="plan-grid">
-          <article class="plan-card">
-            <h3>Normal</h3><p class="plan-price">$1 <span>USD / month</span></p>
-            <p>Simple tracking for personal finances. Includes up to 2 income categories and 5 expense categories.</p>
-            <p>Unlimited transactions. Basic dashboard and monthly reports.</p>
-            <button class="secondary-button" type="button" data-subscribe="normal" disabled>Choose Normal</button>
-          </article>
-          <article class="plan-card premium-plan">
-            <h3>Premium</h3><p class="plan-price">$5 <span>USD / month</span></p>
-            <p>Complete financial tracking with unlimited income and expense categories.</p>
-            <p>Unlimited transactions, all dashboards and reports, and full-history CSV export.</p>
-            <button class="primary-button" type="button" data-subscribe="premium" disabled>Choose Premium</button>
-          </article>
-        </div>
-        <p class="plan-note">Billed monthly. Manage or cancel your subscription at any time. Existing entries remain available after cancellation.</p>
-        <p class="plan-note">Not subscribed? Start free with up to 2 income categories, 5 expense categories, and unlimited transactions. <a href="pricing.html">Compare plans</a>.</p>
         <div class="account-actions">
-          <button class="secondary-button" type="button" id="manage-subscription" hidden>Manage subscription</button>
-          <button class="secondary-button" type="button" id="refresh-account" hidden>Refresh status</button>
+          <button class="secondary-button" type="button" id="refresh-account" hidden>Refresh account</button>
           <button class="text-button" type="button" id="sign-out" hidden>Sign out</button>
         </div>
       </div>

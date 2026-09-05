@@ -304,7 +304,6 @@ async function saveTransactions(transactions, extraCategories = []) {
   try {
     if (!account || account.mode === "loading") throw new Error("Wait for account settings to finish loading.");
     const categories = CategoryPolicy.merge(state.categories, [...extraCategories, ...CategoryPolicy.fromTransactions(transactions)]);
-    CategoryPolicy.check(state.categories, categories, account.plan);
     if (account.mode === "account") {
       await account.save(transactions);
       return true;
@@ -329,9 +328,7 @@ async function saveTransactions(transactions, extraCategories = []) {
     else persist();
     return true;
   } catch (error) {
-    const limited = /category limit/.test(error.message);
-    showToast("Changes not saved", error.message || "Storage is unavailable. Please try again.",
-      limited ? "Upgrade to Premium" : "", limited ? () => account.open() : null);
+    showToast("Changes not saved", error.message || "Storage is unavailable. Please try again.");
     return false;
   }
 }
@@ -351,14 +348,13 @@ function replaceCategoryOptions(select, options, fallbackValue) {
 function renderCategoryOptions() {
   const type = elements.form.querySelector('input[name="type"]:checked').value;
   const existing = state.categories.filter((item) => item.type === type).map((item) => item.name);
-  const limited = window.MoneaAccount?.plan !== "premium" && existing.length >= CategoryPolicy.limits[type];
   const suggestions = type === "income" ? ["Income", "Salary", "Freelance"] : defaultExpenseCategories;
   const available = type === "savings" ? ["Savings"]
-    : [...new Set([...existing, ...(!limited ? suggestions.filter((name) => !existing.some((item) => item.toLowerCase() === name.toLowerCase())) : [])])];
+    : [...new Set([...existing, ...suggestions.filter((name) => !existing.some((item) => item.toLowerCase() === name.toLowerCase()))])];
   replaceCategoryOptions(elements.formCategory, [
     { label: "Select category", value: "" },
     ...available.map((category) => ({ label: category, value: category })),
-    ...(type !== "savings" && !limited ? [{ label: "+ Add category", value: CUSTOM_CATEGORY_VALUE }] : []),
+    ...(type !== "savings" ? [{ label: "+ Add category", value: CUSTOM_CATEGORY_VALUE }] : []),
   ], type === "savings" ? "Savings" : type === "income" ? available[0] || "" : "");
   if (type !== "expense" && !elements.formCategory.value) elements.formCategory.value = available[0] || "";
   replaceCategoryOptions(elements.category, [
@@ -366,9 +362,6 @@ function renderCategoryOptions() {
     ...[...new Set(state.categories.map((item) => item.name))].map((name) => ({ label: name, value: name })),
     { label: "Savings", value: "Savings" },
   ], "all");
-  const message = document.querySelector("#transaction-category-limit");
-  message.textContent = limited ? CategoryPolicy.message(type, window.MoneaAccount?.plan) : "";
-  document.querySelector("#transaction-upgrade").hidden = !limited;
   updateCustomCategoryField();
 }
 
@@ -662,20 +655,13 @@ function renderAccountUsage() {
   }
   const income = state.categories.filter((item) => item.type === "income").length;
   const expense = state.categories.filter((item) => item.type === "expense").length;
-  status.textContent = account.mode === "guest" ? "Local demo · Sign in to subscribe"
-    : account.plan === "premium" ? "Premium · $5 USD/month"
-      : account.plan === "normal" ? "Normal · $1 USD/month" : "Free · No active subscription";
-  usage.textContent = `${income}${account.plan === "premium" ? "" : "/2"} income categories · ${expense}${account.plan === "premium" ? "" : "/5"} expense categories · Unlimited transactions.${account.mode === "guest" ? " Saved only in this browser." : ""}`;
+  status.textContent = account.mode === "guest" ? "Free · Saved on this device" : "Free · Synced to your account";
+  usage.textContent = `${income} income categories · ${expense} expense categories · Unlimited categories and transactions.${account.mode === "guest" ? " Sign in to sync across devices." : ""}`;
 }
 
 function renderCategoryManager() {
-  const type = document.querySelector("#category-type").value;
   const account = window.MoneaAccount;
-  const count = state.categories.filter((item) => item.type === type).length;
-  const limited = account?.plan !== "premium" && count >= CategoryPolicy.limits[type];
-  document.querySelector("#add-category").disabled = limited || !account || account.mode === "loading";
-  document.querySelector("#category-limit-message").textContent = limited ? CategoryPolicy.message(type, account?.plan) : "";
-  document.querySelector("#category-upgrade").hidden = !limited;
+  document.querySelector("#add-category").disabled = !account || account.mode === "loading";
   document.querySelector("#category-list").innerHTML = ["income", "expense"].map((kind) => {
     const names = state.categories.filter((item) => item.type === kind).map((item) => sanitize(item.name));
     return `<div><strong>${kind === "income" ? "Income" : "Expense"} categories (${names.length})</strong><p>${names.length ? names.join(" · ") : "No categories yet"}</p></div>`;
@@ -1103,7 +1089,6 @@ document.querySelector("#category-form").addEventListener("submit", async (event
   if (!category) { showToast("Invalid category", "Enter a category name of up to 40 characters."); return; }
   const account = window.MoneaAccount;
   try {
-    CategoryPolicy.check(state.categories, CategoryPolicy.merge(state.categories, [category]), account?.plan);
     if (account?.mode === "account") await account.createCategory(category);
     else if (!await saveTransactions(state.transactions, [category])) return;
     document.querySelector("#category-name").value = "";
@@ -1111,15 +1096,15 @@ document.querySelector("#category-form").addEventListener("submit", async (event
     renderAll();
     showToast("Category ready", `${category.name} is available for ${category.type} transactions.`);
   } catch (error) {
-    showToast("Category not added", error.message, /category limit/.test(error.message) ? "Upgrade to Premium" : "", () => account.open());
+    showToast("Category not added", error.message);
   }
 });
 
 document.querySelector("#export-history").addEventListener("click", async () => {
   const account = window.MoneaAccount;
-  if (account?.mode !== "account" || account.plan !== "premium") { account?.open(); return; }
+  if (!account || account.mode === "loading") return;
   try {
-    const { transactions } = await account.historyReport();
+    const { transactions } = account.mode === "account" ? await account.historyReport() : { transactions: state.transactions };
     const rows = [["Date", "Type", "Name", "Category", "Note", "Amount (PHP)", "Loan paid"],
       ...transactions.map((item) => [item.date, item.type, item.name, item.category, item.note, item.amount, item.paid])];
     downloadFile(`\uFEFF${rows.map((row) => row.map(csvCell).join(",")).join("\n")}`, "text/csv;charset=utf-8", `perfi-full-history-${todayKey}.csv`);
