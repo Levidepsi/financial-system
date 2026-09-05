@@ -205,3 +205,45 @@ test("simultaneous local saves cannot silently overwrite the first transaction",
   expect(saved.filter(Boolean)).toHaveLength(1);
   expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)).transactions.length, KEY)).toBe(1);
 });
+
+for (const scenario of ["signin", "signup", "confirmation", "invalid"]) {
+test(`password authentication: ${scenario}`, async ({ page, context }) => {
+  await context.route("**/api/config", route => route.fulfill({ json: {
+    configured: true, billingConfigured: false, supabaseUrl: "https://example.supabase.co", supabaseAnonKey: "public",
+  } }));
+  const user = { id: "11111111-1111-4111-8111-111111111111", email: "member@example.com", aud: "authenticated" };
+  let credentials;
+  let authPath;
+  await context.route("https://example.supabase.co/auth/v1/**", route => {
+    credentials = route.request().postDataJSON();
+    authPath = new URL(route.request().url());
+    if (scenario === "invalid") return route.fulfill({ status: 400, json: { code: "invalid_credentials", msg: "Invalid login credentials" } });
+    if (scenario === "confirmation") return route.fulfill({ json: { user, session: null } });
+    return route.fulfill({ json: { user, access_token: "test-token", refresh_token: "refresh", expires_in: 3600, token_type: "bearer" } });
+  });
+  await context.route("**/api/account", route => route.fulfill({ json: { user, plan: "none", revision: 0, transactions: [], categories: [] } }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "Account & plans", exact: true }).click();
+  await expect(page.locator("#sign-in-form")).toBeVisible();
+  await page.locator("#account-email").fill("member@example.com");
+  const signup = ["signup", "confirmation"].includes(scenario);
+  if (signup) await page.locator("#account-toggle").click();
+  await expect(page.locator("#account-password")).toHaveAttribute("autocomplete", signup ? "new-password" : "current-password");
+  await page.locator("#account-password").fill("test-password-123");
+  await page.locator("#account-submit").click();
+  if (scenario === "invalid") {
+    await expect(page.locator("#account-message")).toContainText("Invalid login credentials");
+    await expect(page.locator("#account-submit")).toBeEnabled();
+    await expect(page.locator("#sign-in-form")).toBeVisible();
+  } else if (scenario === "confirmation") {
+    await expect(page.locator("#account-message")).toContainText("Check your email to confirm");
+  } else {
+    await expect(page.locator("#profile-name")).toHaveText("member@example.com");
+    await expect(page.locator("#sign-in-form")).toBeHidden();
+  }
+  expect(credentials.email).toBe("member@example.com");
+  expect(credentials.password).toBe("test-password-123");
+  expect(authPath.pathname).toBe(signup ? "/auth/v1/signup" : "/auth/v1/token");
+  if (!signup) expect(authPath.searchParams.get("grant_type")).toBe("password");
+});
+}

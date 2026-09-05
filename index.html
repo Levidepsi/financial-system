@@ -397,7 +397,9 @@
         <p class="plan-note">Plan amount before any tax, discounts, or prorated changes. View invoices in Manage subscription.</p>
         <form id="sign-in-form" hidden>
           <label class="form-field"><span>Email address</span><input id="account-email" type="email" autocomplete="email" required maxlength="254" /></label>
-          <button class="primary-button" type="submit">Email me a sign-in link</button>
+          <label class="form-field"><span>Password</span><input id="account-password" type="password" autocomplete="current-password" required /></label>
+          <button class="primary-button" id="account-submit" type="submit">Sign in</button>
+          <button class="text-button" id="account-toggle" type="button">Create an account</button>
         </form>
         <div class="plan-grid">
           <article class="plan-card">
