@@ -131,3 +131,31 @@ test("Premium checkout bills exactly $5 and portal cannot target another custome
   assert.equal((await invoke(handler, "billing/portal", checkoutRequest())).status, 200);
   assert.equal(calls[1].customer, "cus_owned");
 });
+
+test("category API checks verified ownership and forwards exact database quota messages", async () => {
+  let args;
+  const db = {
+    auth: { getUser: async () => ({ data: { user: { id: "owner" } } }) },
+    from: () => ({ upsert: async () => ({ data: null }), select: () => ({ eq: () => ({ single: async () => ({ data: {} }) }) }) }),
+    rpc: async (_name, value) => { args = value; return { error: { message: "NORMAL_INCOME_CATEGORY_LIMIT" } }; },
+  };
+  const response = await invoke(createHandler({ env, db }), "categories", { method: "POST", headers: {
+    authorization: "Bearer token", "content-type": "application/json",
+  }, body: { revision: 0, type: "income", name: "Interest", user_id: "victim", plan: "premium" } });
+  assert.equal(response.status, 403);
+  assert.equal(args.p_user_id, "owner");
+  assert.equal(response.body.error, "You have reached the 2-income-category limit for the Normal plan.");
+});
+
+test("premium reports cannot be unlocked by a browser-supplied plan", async () => {
+  let actualPlan = "normal";
+  const db = {
+    auth: { getUser: async () => ({ data: { user: { id: "owner" } } }) },
+    from: () => ({ upsert: async () => ({ data: null }), select: () => ({ eq: () => ({ single: async () => ({ data: { transactions: [] } }) }) }) }),
+    rpc: async () => ({ data: actualPlan }),
+  };
+  const handler = createHandler({ env, db });
+  assert.equal((await invoke(handler, "reports/history?plan=premium", { headers: { authorization: "Bearer token" } })).status, 403);
+  actualPlan = "premium";
+  assert.equal((await invoke(handler, "reports/history", { headers: { authorization: "Bearer token" } })).status, 200);
+});

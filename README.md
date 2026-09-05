@@ -2,12 +2,17 @@
 
 Personal finance tracker with a local demo, email sign-in, account-scoped cloud storage, loan payment status, and Stripe subscriptions.
 
-| Plan | Monthly price | Income entries | Expense entries |
+| Plan | Monthly price | Income categories | Expense categories |
 | --- | --- | --- | --- |
-| Normal | $1 USD | 5 per calendar month | 5 per calendar month |
+| Free (not subscribed) | $0 | 2 | 5 |
+| Normal | $1 USD | 2 | 5 |
 | Premium | $5 USD | Unlimited | Unlimited |
 
-Savings entries are unlimited on both active plans. Limits use each entry's transaction month, not the subscription renewal date. CSV imports and backup restores go through the same database checks as manual entries. Deleting entries frees space in that month. After a downgrade, existing entries above the limit are retained; counts above five cannot increase. After expiration or cancellation, users can still view, export, delete, or mark existing loans paid, but adding entries requires an active subscription.
+All plans, including unsubscribed accounts, allow unlimited transactions within their categories. Category limits apply to the entire account and never reset monthly. Savings entries do not consume income/expense category slots. The basic dashboard and monthly CSV reports remain available to everyone; Premium also includes a server-protected full-history CSV report. The public comparison page is `/pricing.html`.
+
+Normal is an optional paid plan with the same limits as Free; no additional Free transaction cap is applied. A subscription's expiration, cancellation, or downgrade never deletes categories or transactions. Users above a category limit can keep recording transactions in their existing categories, but cannot create additional categories of that type. Empty categories count, and deleting transactions does not delete their categories.
+
+Frontend limits disable Add Category and display the income/expense-specific limit message with Upgrade to Premium. The API derives ownership from the verified session, and the database checks the subscription and locks the account row before creating a category. The same checks protect category creation through transaction saves, CSV imports, and backup restores. A failed batch rolls back all newly-created categories and transactions. Category names are case-insensitive within each type; income and expense categories are separate.
 
 ## Run locally
 
@@ -18,18 +23,18 @@ npm ci
 npm run dev
 ```
 
-Open `http://127.0.0.1:5500`. The server builds and serves only `dist/`; secrets and server files are never part of the public output. Restart it after code changes. Without service credentials the local demo remains available, and billing buttons are disabled. The demo has Normal's entry limits; pre-existing sample/history data is retained even if already above five.
+Open `http://127.0.0.1:5500`. The server builds and serves only `dist/`; secrets and server files are never part of the public output. Restart it after code changes. Without service credentials the local demo remains available, and billing buttons are disabled. The demo mirrors Free's category limits. Existing local arrays are migrated to a ledger containing both transactions and persistent categories on the next save, preserving all existing data. Local-only storage is editable by its device owner; server enforcement applies to signed-in accounts.
 
 ## Configure accounts
 
-1. Create a Supabase project and run `supabase/migrations/001_accounts_and_billing.sql` in its SQL Editor once.
+1. Create a Supabase project and run `supabase/migrations/001_accounts_and_billing.sql`, then `supabase/migrations/002_category_limits.sql` in its SQL Editor once, in that order. **For an existing installation, run only the new `002_category_limits.sql`.** It preserves existing ledgers, backfills their categories (including those above the new limits), replaces transaction-count restrictions, and adds billing details. Apply it before deploying the updated app/API. After upgrading, replay the latest Stripe subscription event to populate billing details for existing subscriptions, or wait for the next subscription update.
 2. Enable email sign-in. Configure the Site URL and allowed redirect URLs to include your production origin and `http://127.0.0.1:5500/` for local testing. Use a production SMTP provider before inviting real users.
 3. Copy `.env.example` to `.env.local`. Fill in `SUPABASE_URL`, the public `SUPABASE_ANON_KEY`, and the server-only `SUPABASE_SERVICE_ROLE_KEY`.
 4. Set `APP_URL` to your app origin. The local server loads `.env.local`; Vercel needs the same values in its environment settings.
 
 Sign-in links use PKCE and should be opened in the browser that requested them. The server verifies access tokens with Supabase `getUser()` and derives the account ID from the verified user, never from the request body. Database tables and RPC functions are inaccessible to browser roles; only the server service role can access them.
 
-New signed-in accounts start empty. Local browser entries are never automatically attached to an email account. To migrate them, export a monthly CSV from the local demo, sign in, subscribe, and import it. Cloud data is held in memory, never saved to the shared guest ledger or service-worker cache. Signing out clears it from the page. Account changes in another tab also clear the previous account's view.
+New signed-in accounts start empty. Local browser entries are never automatically attached to an email account. To migrate them, export a monthly CSV from the local demo, sign in, and import it within your plan's category limits. Cloud data is held in memory, never saved to the shared guest ledger or service-worker cache. Signing out clears it from the page. Account changes in another tab also clear the previous account's view.
 
 ## Configure Stripe
 
@@ -47,7 +52,7 @@ stripe listen --events customer.subscription.created,customer.subscription.updat
 
 Use the CLI's signing secret in `.env.local` while forwarding locally. Restart the local server after changing environment variables.
 
-Access is granted only for a recognized price on an `active` subscription whose billing period has not expired. Pending, past-due, canceled, unknown-price, and expired subscriptions do not grant entry creation. A Checkout return URL cannot grant access. Verified webhooks retrieve current Stripe subscription state, map its customer to the stored account, and update the database; duplicate/older events cannot overwrite newer subscription records. Do not disable webhook delivery: renewal needs to extend the recorded period end.
+Paid-plan access is granted only for a recognized price on an `active` subscription whose billing period has not expired. Pending, past-due, canceled, unknown-price, and expired subscriptions use Free's category limits and retain all their data. A Checkout return URL cannot grant access. Verified webhooks retrieve current Stripe subscription state, map its customer to the stored account, and update the database; duplicate/older events cannot overwrite newer subscription records. Do not disable webhook delivery: renewal needs to extend the recorded period end. Account settings show the effective plan, subscription status, renewal/access-end date, and recorded recurring plan amount; actual invoices are available in the Stripe portal.
 
 An existing subscription must be changed through the portal instead of creating a second subscription. Repeated checkout requests share an idempotency key and a one-hour database reservation. If a checkout for one plan is already open, complete it or let it expire before choosing the other plan.
 

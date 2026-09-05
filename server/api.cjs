@@ -1,11 +1,15 @@
 const { createClient } = require("@supabase/supabase-js");
 const Stripe = require("stripe");
 const { HttpError, validateTransactions, subscriptionRecord } = require("./validation.cjs");
+const CategoryPolicy = require("../category-policy.js");
 
 const DATABASE_ERRORS = {
   REVISION_CONFLICT: [409, "Another session changed your data. The latest version has been loaded; try again."],
-  PLAN_LIMIT: [403, "Normal allows five income entries and five expense entries per calendar month. Choose Premium for unlimited entries."],
-  SUBSCRIPTION_REQUIRED: [403, "Choose a subscription to add entries to your account."],
+  NORMAL_INCOME_CATEGORY_LIMIT: [403, CategoryPolicy.message("income", "normal")],
+  NORMAL_EXPENSE_CATEGORY_LIMIT: [403, CategoryPolicy.message("expense", "normal")],
+  FREE_INCOME_CATEGORY_LIMIT: [403, CategoryPolicy.message("income", "none")],
+  FREE_EXPENSE_CATEGORY_LIMIT: [403, CategoryPolicy.message("expense", "none")],
+  INVALID_CATEGORY: [400, "Enter a valid income or expense category name."],
   CHECKOUT_PENDING: [409, "You already have a checkout open for the other plan. Finish it or wait for it to expire before choosing a different plan."],
 };
 
@@ -107,10 +111,10 @@ function createHandler({ env = process.env, db: providedDb, stripe: providedStri
       if (route === "stripe/webhook" && req.method === "POST") {
         res.end(JSON.stringify(await webhook(req))); return;
       }
-      const allowed = { account: "GET", transactions: "PUT", "billing/checkout": "POST", "billing/portal": "POST" };
+      const allowed = { account: "GET", transactions: "PUT", categories: "POST", "reports/history": "GET", "billing/checkout": "POST", "billing/portal": "POST" };
       if (!Object.hasOwn(allowed, route)) throw new HttpError(404, "Not found.");
       if (req.method !== allowed[route]) { res.setHeader("Allow", allowed[route]); throw new HttpError(405, "Method not allowed."); }
-      if (req.method !== "GET" && req.headers.origin && req.headers.origin !== new URL(env.APP_URL).origin) {
+      if (req.method !== "GET" && req.headers.origin && (!env.APP_URL || req.headers.origin !== new URL(env.APP_URL).origin)) {
         throw new HttpError(403, "Unrecognized request origin.");
       }
       const token = req.headers.authorization?.match(/^Bearer (.+)$/)?.[1];
@@ -121,9 +125,20 @@ function createHandler({ env = process.env, db: providedDb, stripe: providedStri
       const account = await accountFor(user.id);
       let payload;
       if (route === "account") {
-        const plan = result(await database().rpc("monea_plan", { p_user_id: user.id }));
-        payload = { user: { id: user.id, email: user.email }, plan, revision: account.revision,
+        const details = result(await database().rpc("monea_account_details", { p_user_id: user.id }));
+        payload = { user: { id: user.id, email: user.email }, ...details, revision: account.revision,
           transactions: account.transactions, hasCustomer: Boolean(account.stripe_customer_id) };
+      } else if (route === "categories") {
+        const body = await jsonBody(req);
+        const category = CategoryPolicy.normalize(body?.type, body?.name);
+        if (!category || !Number.isSafeInteger(body.revision) || body.revision < 0) throw new HttpError(400, "Enter a valid category and revision.");
+        payload = result(await database().rpc("monea_create_category", {
+          p_user_id: user.id, p_revision: body.revision, p_type: category.type, p_name: category.name,
+        }));
+      } else if (route === "reports/history") {
+        const plan = result(await database().rpc("monea_plan", { p_user_id: user.id }));
+        if (plan !== "premium") throw new HttpError(403, "Upgrade to Premium to export the full-history report.");
+        payload = { transactions: account.transactions };
       } else if (route === "transactions") {
         const body = await jsonBody(req);
         if (!Number.isSafeInteger(body?.revision) || body.revision < 0) throw new HttpError(400, "Invalid revision.");

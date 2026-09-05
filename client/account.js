@@ -21,7 +21,18 @@ function render() {
   document.querySelector("#profile-name").textContent = user?.email || "Financial User";
   document.querySelector("#profile-plan").textContent = mode === "loading" ? "Loading account…"
     : account?.plan === "premium" ? "Premium · $5/month"
-      : account?.plan === "normal" ? "Normal · $1/month" : user ? "No active subscription" : "Local demo";
+      : account?.plan === "normal" ? "Normal · $1/month" : user ? "Free plan" : "Local demo";
+  const subscription = account?.subscription;
+  const expired = subscription?.status === "active" && subscription.periodEnd && new Date(subscription.periodEnd) <= new Date();
+  document.querySelector("#billing-plan").textContent = account?.plan === "premium" ? "Premium" : account?.plan === "normal" ? "Normal" : "Free";
+  document.querySelector("#billing-status").textContent = expired ? "Expired — Free limits apply"
+    : subscription ? `${subscription.status.replaceAll("_", " ")}${subscription.cancelAtPeriodEnd && subscription.status === "active" ? " · Cancels at period end" : ""}` : "Not subscribed";
+  document.querySelector("#billing-date-label").textContent = subscription?.cancelAtPeriodEnd ? "Access ends" : "Renewal date";
+  document.querySelector("#billing-date").textContent = subscription?.periodEnd && ["active", "trialing"].includes(subscription.status) && !expired
+    ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(subscription.periodEnd)) : "No renewal scheduled";
+  document.querySelector("#billing-amount").textContent = Number.isSafeInteger(subscription?.amount) && subscription?.currency
+    ? `${new Intl.NumberFormat("en-US", { style: "currency", currency: subscription.currency }).format(subscription.amount / 100)} ${subscription.currency.toUpperCase()} / ${subscription.interval || "month"}`
+    : subscription ? "Awaiting billing details" : "$0 — Free";
   document.querySelector("#sign-in-form").hidden = !config?.configured || Boolean(user);
   document.querySelector("#sign-out").hidden = !user;
   document.querySelector("#refresh-account").hidden = !user;
@@ -65,7 +76,7 @@ async function refresh() {
     if (expected !== generation) return;
     account = next;
     mode = "account";
-    message.textContent = `${user.email}. ${account.plan === "none" ? "Choose a plan to add entries. Your account starts with an empty ledger; you can import a CSV after subscribing." : "Your subscription and financial data are synced to your account."}`;
+    message.textContent = `${user.email}. ${account.plan === "none" ? "You can track unlimited transactions with up to 2 income and 5 expense categories for free." : "Your subscription and financial data are synced to your account."}`;
     publish();
   } catch (error) {
     if (expected === generation) message.textContent = error.message;
@@ -96,19 +107,22 @@ window.MoneaAccount = {
   get plan() { return account?.plan || "none"; },
   open() { dialog.showModal(); },
   refresh,
-  async save(transactions) {
+  save(transactions) { return window.MoneaAccount.mutate("transactions", "PUT", { transactions }); },
+  createCategory(category) { return window.MoneaAccount.mutate("categories", "POST", category); },
+  historyReport() { return request("reports/history"); },
+  async mutate(path, method, body) {
     if (mode !== "account") throw new Error("Wait for your account to finish loading.");
     if (saving || refreshing) throw new Error("An account update is in progress. Please try again.");
     const expected = generation;
     saving = true;
     try {
-      const next = await request("transactions", { method: "PUT", body: JSON.stringify({ transactions, revision: account.revision }) });
+      const next = await request(path, { method, body: JSON.stringify({ ...body, revision: account.revision }) });
       if (expected !== generation) throw new Error("Your account changed. Please try again.");
       account = { ...account, ...next };
       publish();
       try { localStorage.setItem("monea-account-update", JSON.stringify({ userId: user.id, nonce: crypto.randomUUID() })); } catch { /* Polling still refreshes other sessions. */ }
     } catch (error) {
-      if (expected === generation && error.status === 409) {
+      if (expected === generation && [403, 409].includes(error.status)) {
         saving = false;
         await refresh();
       }
@@ -196,6 +210,7 @@ async function initialize() {
     publish();
   }
   render();
+  if (new URL(location.href).searchParams.has("plan")) dialog.showModal();
 }
 
 void initialize();

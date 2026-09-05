@@ -1,3 +1,5 @@
+const CategoryPolicy = require("../category-policy.js");
+
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
@@ -23,9 +25,11 @@ function validateTransactions(value) {
       || typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0 || amount > 999999999.99
       || !Number.isFinite(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== date || date > latestDay
       || typeof paid !== "boolean") throw new HttpError(400, "Invalid or duplicate transaction.");
+    const categoryRecord = type === "savings" ? null : CategoryPolicy.normalize(type, category);
+    if (type !== "savings" && !categoryRecord) throw new HttpError(400, "Invalid category.");
     ids.add(id);
     return { id, name: name.trim(), note: note.trim(), type,
-      category: type === "income" ? "Income" : type === "savings" ? "Savings" : category.trim(),
+      category: type === "savings" ? "Savings" : categoryRecord.name,
       amount: Math.round(amount * 100) / 100, date,
       paid: type === "expense" && category === "Debt Repayment" && paid };
   });
@@ -40,7 +44,11 @@ function subscriptionRecord(subscription, prices) {
   return { subscription_id: subscription.id,
     customer_id: typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id,
     plan, status: subscription.status,
-    period_end: Number.isFinite(end) ? new Date(end * 1000).toISOString() : null };
+    period_end: Number.isFinite(end) ? new Date(end * 1000).toISOString() : null,
+    cancel_at_period_end: subscription.cancel_at_period_end === true,
+    billing_amount: Number.isSafeInteger(item?.price?.unit_amount) ? item.price.unit_amount * (item.quantity ?? 1) : null,
+    billing_currency: item?.price?.currency || null,
+    billing_interval: item?.price?.recurring?.interval || null };
 }
 
 module.exports = { HttpError, validateTransactions, subscriptionRecord };
