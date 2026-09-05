@@ -1,8 +1,11 @@
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
+const { buildApp } = require("./scripts/build.cjs");
+const { createHandler } = require("./server/api.cjs");
 
-const root = __dirname;
+const root = path.join(__dirname, "dist");
+const api = createHandler();
 const port = Number(process.env.PORT) || 5500;
 const host = "127.0.0.1";
 
@@ -20,7 +23,13 @@ const contentTypes = {
 };
 
 const server = http.createServer((request, response) => {
-  const requestPath = decodeURIComponent(new URL(request.url, `http://${host}`).pathname);
+  if (new URL(request.url, `http://${host}`).pathname.startsWith("/api/")) {
+    void api(request, response);
+    return;
+  }
+  let requestPath;
+  try { requestPath = decodeURIComponent(new URL(request.url, `http://${host}`).pathname); }
+  catch { response.writeHead(400).end("Invalid URL"); return; }
   const relativePath = requestPath === "/" ? "index.html" : requestPath.replace(/^\/+/, "");
   const filePath = path.resolve(root, relativePath);
 
@@ -43,6 +52,6 @@ const server = http.createServer((request, response) => {
   });
 });
 
-server.listen(port, host, () => {
+buildApp().then(() => server.listen(port, host, () => {
   console.log(`Expense tracker running at http://${host}:${port}`);
-});
+})).catch((error) => { console.error(error); process.exitCode = 1; });

@@ -165,6 +165,7 @@ function normalizeTransaction(item) {
     category: type === "income" ? "Income" : type === "savings" ? "Savings" : category,
     amount: Math.round(amount * 100) / 100,
     date,
+    paid: type === "expense" && category === "Debt Repayment" && item.paid === true,
   };
 }
 
@@ -281,15 +282,51 @@ const elements = {
   customCategoryField: document.querySelector("#custom-category-field"),
 };
 
-function saveTransactions() {
+let localSnapshot;
+try { localSnapshot = localStorage.getItem(STORAGE_KEY); } catch { localSnapshot = null; }
+
+async function saveTransactions(transactions) {
+  const account = window.MoneaAccount;
+  const identity = account?.identity;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.transactions));
-  } catch {
-    showToast("Storage unavailable", "Changes will last only until this tab is closed.");
+    if (!account || account.mode === "loading") throw new Error("Wait for account settings to finish loading.");
+    if (account.mode === "account") {
+      await account.save(transactions);
+      return true;
+    }
+    const persist = () => {
+      if (account.identity !== identity || account.mode !== "guest") throw new Error("Your account changed. Please try again.");
+      if (localStorage.getItem(STORAGE_KEY) !== localSnapshot) {
+        refreshSharedData();
+        throw new Error("Another tab changed your data. The latest version has been loaded; try again.");
+      }
+      const counts = new Map();
+      for (const item of transactions) {
+        if (!["income", "expense"].includes(item.type)) continue;
+        const key = `${item.type}:${item.date.slice(0, 7)}`;
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+      for (const [key, count] of counts) {
+        const [type, month] = key.split(":");
+        const previous = state.transactions.filter((item) => item.type === type && item.date.startsWith(month)).length;
+        if (count > 5 && count > previous) throw new Error("The local demo allows five income and five expense entries per month. Sign in and choose Premium for unlimited entries.");
+      }
+      const serialized = JSON.stringify(transactions);
+      localStorage.setItem(STORAGE_KEY, serialized);
+      localSnapshot = serialized;
+      state.transactions = transactions;
+    };
+    if (navigator.locks) await navigator.locks.request("monea-local-transactions", persist);
+    else persist();
+    return true;
+  } catch (error) {
+    showToast("Changes not saved", error.message || "Storage is unavailable. Please try again.");
+    return false;
   }
 }
 
 function saveCustomCategories() {
+  if (window.MoneaAccount?.mode !== "guest") return;
   try {
     localStorage.setItem(CUSTOM_CATEGORIES_STORAGE_KEY, JSON.stringify(state.customCategories));
   } catch {
@@ -349,7 +386,7 @@ function updateCustomCategoryField({ focus = false } = {}) {
 function sanitize(value) {
   const node = document.createElement("div");
   node.textContent = value;
-  return node.innerHTML;
+  return node.innerHTML.replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 }
 
 function transactionsForMonth(monthKey = state.selectedMonth) {
@@ -421,7 +458,11 @@ function renderSummary() {
 
 function filteredTransactions() {
   return transactionsForMonth()
-    .filter((transaction) => state.typeFilter === "all" || transaction.type === state.typeFilter)
+    .filter((transaction) => {
+      if (state.typeFilter === "loans") return transaction.category === "Debt Repayment" && !transaction.paid;
+      if (state.typeFilter === "paid-loans") return transaction.category === "Debt Repayment" && transaction.paid;
+      return state.typeFilter === "all" || transaction.type === state.typeFilter;
+    })
     .filter((transaction) => state.categoryFilter === "all" || transaction.category === state.categoryFilter)
     .filter((transaction) => {
       const haystack = `${transaction.name} ${transaction.note || ""} ${transaction.category}`.toLowerCase();
@@ -452,6 +493,7 @@ function transactionRow(transaction) {
       <td>${dateFormatter.format(date)}</td>
       <td><span class="amount ${transaction.type}">${sign}${formatCurrency.format(transaction.amount)}</span></td>
       <td>
+        ${transaction.category === "Debt Repayment" ? `<button class="loan-status-button" type="button" data-loan-id="${transaction.id}" aria-pressed="${transaction.paid === true}" aria-label="${transaction.paid ? "Mark unpaid" : "Mark paid"}: ${safeName}">${transaction.paid ? "Paid · Undo" : "Mark paid"}</button>` : ""}
         <button class="delete-button" type="button" data-delete-id="${transaction.id}" aria-label="Delete ${safeName}">
           <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6" /></svg>
         </button>
@@ -609,6 +651,27 @@ function renderAll() {
   renderTransactions();
   renderBudgets();
   renderChart();
+  renderAccountUsage();
+}
+
+function renderAccountUsage() {
+  const account = window.MoneaAccount;
+  const status = document.querySelector("#account-status");
+  const usage = document.querySelector("#account-usage");
+  if (!account || account.mode === "loading") {
+    status.textContent = "Loading account…";
+    usage.textContent = "Please wait before saving changes.";
+    return;
+  }
+  const entries = transactionsForMonth();
+  const income = entries.filter((item) => item.type === "income").length;
+  const expense = entries.filter((item) => item.type === "expense").length;
+  status.textContent = account.mode === "guest" ? "Local demo · Sign in to subscribe"
+    : account.plan === "premium" ? "Premium · $5 USD/month"
+      : account.plan === "normal" ? "Normal · $1 USD/month" : "No active subscription";
+  usage.textContent = account.mode === "account" && account.plan === "none"
+    ? "Choose a plan to add entries. Your existing data is available to view and export."
+    : `${monthLabel(state.selectedMonth)}: ${income}${account.plan === "premium" ? "" : "/5"} income entries · ${expense}${account.plan === "premium" ? "" : "/5"} expense entries${account.plan === "premium" ? " · Unlimited" : ""}.${account.mode === "guest" ? " Saved only in this browser." : ""}`;
 }
 
 function defaultDateForSelectedMonth() {
@@ -643,7 +706,7 @@ function showToast(title, message, actionLabel = "", action = null) {
   toastTimer = window.setTimeout(() => elements.toast.classList.remove("visible"), 4200);
 }
 
-function addTransaction(form) {
+async function addTransaction(form) {
   const data = new FormData(form);
   const type = String(data.get("type") ?? "");
   const selectedCategory = String(data.get("category") ?? "");
@@ -665,26 +728,25 @@ function addTransaction(form) {
     return;
   }
 
-  state.transactions.push(transaction);
+  if (!await saveTransactions([...state.transactions, transaction])) return;
   const categoryAdded = registerCustomCategories([transaction]);
   state.selectedMonth = transaction.date.slice(0, 7);
   state.visibleLimit = 6;
-  saveTransactions();
   if (categoryAdded) renderCategoryOptions();
   renderAll();
   closeDialog();
   showToast("Transaction added", `${transaction.name} was saved to ${monthLabel(state.selectedMonth)}.`);
 }
 
-function deleteTransaction(id) {
+async function deleteTransaction(id) {
   const transaction = state.transactions.find((item) => item.id === id);
   if (!transaction) return;
-  state.transactions = state.transactions.filter((item) => item.id !== id);
-  saveTransactions();
+  const identity = window.MoneaAccount?.identity;
+  if (!await saveTransactions(state.transactions.filter((item) => item.id !== id))) return;
   renderAll();
-  showToast("Transaction removed", `${transaction.name} was removed.`, "Undo", () => {
-    state.transactions.push(transaction);
-    saveTransactions();
+  showToast("Transaction removed", `${transaction.name} was removed.`, "Undo", async () => {
+    if (window.MoneaAccount?.identity !== identity) return;
+    if (!await saveTransactions([...state.transactions, transaction])) return;
     renderAll();
     showToast("Transaction restored", `${transaction.name} is back in ${monthLabel(transaction.date.slice(0, 7))}.`);
   });
@@ -723,6 +785,7 @@ function backupData() {
 }
 
 async function restoreData(event) {
+  const identity = window.MoneaAccount?.identity;
   const [file] = event.target.files;
   event.target.value = "";
   if (!file) return;
@@ -739,12 +802,12 @@ async function restoreData(event) {
     const confirmed = window.confirm(`Replace your current ${state.transactions.length} transactions with ${transactions.length} from this backup?`);
     if (!confirmed) return;
 
-    state.transactions = transactions;
+    if (window.MoneaAccount?.identity !== identity) throw new Error("Your account changed. Select the file again.");
+    if (!await saveTransactions(transactions)) return;
     state.selectedMonth = transactions.length
       ? transactions.map((transaction) => transaction.date.slice(0, 7)).sort().at(-1)
       : currentMonth;
     state.visibleLimit = 6;
-    saveTransactions();
     renderAll();
     showToast("Backup restored", `${transactions.length} transactions are now available.`);
   } catch (error) {
@@ -812,6 +875,7 @@ function transactionFingerprint(transaction) {
 }
 
 async function importCsv(event) {
+  const identity = window.MoneaAccount?.identity;
   const [file] = event.target.files;
   event.target.value = "";
   if (!file) return;
@@ -830,6 +894,7 @@ async function importCsv(event) {
       category: column("category"),
       note: column("note", "notes"),
       amount: column("amount", "amount (php)", "amount php"),
+      paid: column("paid", "loan paid"),
     };
     if ([columns.date, columns.type, columns.name, columns.category, columns.amount].includes(-1)) {
       throw new Error("Required columns: Date, Type, Name, Category, and Amount (PHP).");
@@ -869,6 +934,7 @@ async function importCsv(event) {
         type,
         amount: Number(rawAmount),
         date: normalizeCsvDate(row[columns.date]),
+        paid: columns.paid >= 0 && ["true", "yes", "paid"].includes(cleanText(row[columns.paid]).toLowerCase()),
       });
 
       if (!transaction) {
@@ -895,11 +961,11 @@ async function importCsv(event) {
     const confirmed = window.confirm(`Import ${imported.length} transactions${skipped ? ` and skip ${skipped} invalid or duplicate rows` : ""}?`);
     if (!confirmed) return;
 
-    state.transactions.push(...imported);
+    if (window.MoneaAccount?.identity !== identity) throw new Error("Your account changed. Select the file again.");
+    if (!await saveTransactions([...state.transactions, ...imported])) return;
     const categoriesAdded = registerCustomCategories(imported);
     state.selectedMonth = imported.map((transaction) => transaction.date.slice(0, 7)).sort().at(-1);
     state.visibleLimit = 6;
-    saveTransactions();
     if (categoriesAdded) renderCategoryOptions();
     renderAll();
     showToast("CSV imported", `${imported.length} transactions added${skipped ? `; ${skipped} rows skipped` : ""}.`);
@@ -912,8 +978,8 @@ function exportSelectedMonth() {
   const transactions = transactionsForMonth().sort((a, b) => new Date(a.date) - new Date(b.date));
   const totals = getTotals(transactions);
   const rows = [
-    ["Date", "Type", "Name", "Category", "Note", "Amount (PHP)"],
-    ...transactions.map((transaction) => [transaction.date, transaction.type, transaction.name, transaction.category, transaction.note || "", transaction.amount]),
+    ["Date", "Type", "Name", "Category", "Note", "Amount (PHP)", "Loan paid"],
+    ...transactions.map((transaction) => [transaction.date, transaction.type, transaction.name, transaction.category, transaction.note || "", transaction.amount, transaction.paid === true]),
     [],
     ["Monthly summary", "Amount (PHP)"],
     ["Gross income", totals.income],
@@ -982,7 +1048,17 @@ elements.category.addEventListener("change", (event) => {
   renderTransactions();
 });
 
-elements.list.addEventListener("click", (event) => {
+elements.list.addEventListener("click", async (event) => {
+  const loanButton = event.target.closest("[data-loan-id]");
+  if (loanButton) {
+    const transaction = state.transactions.find((item) => item.id === loanButton.dataset.loanId);
+    if (!transaction || transaction.category !== "Debt Repayment") return;
+    const paid = !transaction.paid;
+    if (!await saveTransactions(state.transactions.map((item) => item.id === transaction.id ? { ...item, paid } : item))) return;
+    renderAll();
+    showToast(paid ? "Loan marked paid" : "Loan marked unpaid", `${transaction.name} is in the ${paid ? "Paid loans" : "Unpaid loans"} tab.`);
+    return;
+  }
   const button = event.target.closest("[data-delete-id]");
   if (button) deleteTransaction(button.dataset.deleteId);
 });
@@ -1041,6 +1117,61 @@ if ("serviceWorker" in navigator && window.location.protocol !== "file:") {
   });
 }
 
+function refreshSharedData() {
+  if (window.MoneaAccount?.mode === "account") {
+    void window.MoneaAccount.refresh().catch(() => {});
+    return;
+  }
+  if (window.MoneaAccount?.mode !== "guest") return;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const transactions = raw === null ? [] : normalizeTransactionList(JSON.parse(raw));
+    if (!transactions) {
+      showToast("Refresh failed", "Another tab saved invalid data. Your current view has been preserved.");
+      return;
+    }
+    state.transactions = transactions;
+    localSnapshot = raw;
+    state.customCategories = loadCustomCategories(transactions);
+    renderCategoryOptions();
+    renderAll();
+  } catch {
+    showToast("Refresh unavailable", "Browser storage could not be read.");
+  }
+}
+
+let displayedIdentity = "guest";
+document.addEventListener("monea:account", (event) => {
+  const { mode, account, user } = event.detail;
+  const nextIdentity = user?.id || "guest";
+  if (displayedIdentity !== nextIdentity) {
+    displayedIdentity = nextIdentity;
+    toastAction = null;
+    closeDialog();
+    state.categoryFilter = "all";
+  }
+  if (mode === "guest") {
+    state.transactions = loadTransactions();
+    try { localSnapshot = localStorage.getItem(STORAGE_KEY); } catch { localSnapshot = null; }
+    state.customCategories = loadCustomCategories(state.transactions);
+  } else {
+    state.transactions = account?.transactions || [];
+    state.customCategories = [...new Set(state.transactions.map((item) => item.category).filter(isCustomExpenseCategory))];
+  }
+  renderCategoryOptions();
+  state.categoryFilter = elements.category.value;
+  renderAll();
+});
+
 renderCategoryOptions();
 updateCustomCategoryField();
 renderAll();
+
+window.addEventListener("storage", (event) => {
+  if (event.storageArea === localStorage
+    && (event.key === null || [STORAGE_KEY, CUSTOM_CATEGORIES_STORAGE_KEY].includes(event.key))) {
+    refreshSharedData();
+  }
+});
+
+window.addEventListener("focus", refreshSharedData);

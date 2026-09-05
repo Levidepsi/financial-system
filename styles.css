@@ -2053,3 +2053,51 @@ tr:hover .delete-button,
     transition-duration: .01ms !important;
   }
 }
+.loan-status-button {
+  padding: 6px 8px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  background: var(--green-soft);
+  color: var(--green);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.account-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: white;
+}
+.account-banner p, .plan-note, #account-message {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.account-dialog { width: min(680px, calc(100vw - 24px)); }
+.account-dialog-content { padding: 26px; }
+.account-dialog #sign-in-form { padding: 0; margin: 18px 0; }
+#sign-in-form .primary-button { margin-top: 12px; }
+.plan-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 22px 0 14px; }
+.plan-card { display: flex; flex-direction: column; padding: 20px; border: 1px solid var(--line); border-radius: 16px; }
+.plan-card h3 { margin: 0; }
+.plan-card p { font-size: 12px; line-height: 1.6; }
+.plan-card .plan-price { margin: 12px 0 0; font-size: 30px; font-weight: 700; }
+.plan-price span { font-size: 12px; font-weight: 400; }
+.plan-card button { margin-top: auto; }
+.premium-plan { border-color: var(--green); background: var(--green-soft); }
+.account-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 20px; }
+.account-dialog button:disabled { opacity: .55; cursor: not-allowed; }
+.account-dialog [hidden] { display: none; }
+#profile-name { max-width: 145px; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 600px) {
+  .account-banner { align-items: flex-start; flex-direction: column; }
+  .plan-grid { grid-template-columns: 1fr; }
+  .account-dialog-content { padding: 20px; }
+}

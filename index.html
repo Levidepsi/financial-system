@@ -10,6 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="stylesheet" href="styles.css" />
     <script src="app.js" defer></script>
+    <script src="account.js" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -45,11 +46,11 @@
         </nav>
 
         <div class="sidebar-footer">
-          <button class="profile-button" type="button" aria-label="Open profile menu">
+          <button class="profile-button" type="button" data-open-account aria-label="Open account and subscription">
             <span class="avatar">FU</span>
             <span class="profile-copy">
-              <strong>Financial User</strong>
-              <small>Personal account</small>
+              <strong id="profile-name">Financial User</strong>
+              <small id="profile-plan">Local demo</small>
             </span>
             <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></svg>
           </button>
@@ -60,7 +61,7 @@
         <header class="topbar">
           <div>
             <p class="eyebrow" id="today-label">Friday, August 14</p>
-            <h1 id="greeting">Good morning, Financial User.</h1>
+            <h1 id="greeting">Good morning, Welcome to Perfi  .</h1>
             <p>Here’s how your money is looking today.</p>
           </div>
           <div class="topbar-actions">
@@ -74,6 +75,11 @@
             </button>
           </div>
         </header>
+
+        <section class="account-banner" aria-label="Account and subscription">
+          <div><strong id="account-status">Loading account…</strong><p id="account-usage">Your existing browser data stays on this device.</p></div>
+          <button class="secondary-button" type="button" data-open-account>Account &amp; plans</button>
+        </section>
 
         <section class="period-toolbar" aria-label="Monthly reporting period">
           <div class="period-copy">
@@ -226,6 +232,8 @@
               <button type="button" data-filter="expense" aria-pressed="false">Expenses</button>
               <button type="button" data-filter="income" aria-pressed="false">Income</button>
               <button type="button" data-filter="savings" aria-pressed="false">Savings</button>
+              <button type="button" data-filter="loans" aria-pressed="false">Unpaid loans</button>
+              <button type="button" data-filter="paid-loans" aria-pressed="false">Paid loans</button>
             </div>
             <div class="toolbar-actions">
               <label class="search-field">
@@ -355,6 +363,38 @@
           <button class="primary-button" type="submit">Save transaction</button>
         </div>
       </form>
+    </dialog>
+
+    <dialog class="transaction-dialog account-dialog" id="account-dialog" aria-labelledby="account-title">
+      <div class="account-dialog-content">
+        <div class="dialog-header">
+          <div><p class="section-kicker">Your account</p><h2 id="account-title">Account &amp; plans</h2></div>
+          <button class="icon-button close-button" type="button" id="close-account" aria-label="Close account dialog">×</button>
+        </div>
+        <p id="account-message" role="status" aria-live="polite">Loading account settings…</p>
+        <form id="sign-in-form" hidden>
+          <label class="form-field"><span>Email address</span><input id="account-email" type="email" autocomplete="email" required maxlength="254" /></label>
+          <button class="primary-button" type="submit">Email me a sign-in link</button>
+        </form>
+        <div class="plan-grid">
+          <article class="plan-card">
+            <h3>Normal</h3><p class="plan-price">$1 <span>USD / month</span></p>
+            <p>5 income entries and 5 expense entries per calendar month. Savings entries are unlimited.</p>
+            <button class="secondary-button" type="button" data-subscribe="normal" disabled>Choose Normal</button>
+          </article>
+          <article class="plan-card premium-plan">
+            <h3>Premium</h3><p class="plan-price">$5 <span>USD / month</span></p>
+            <p>Unlimited income, expense, and savings entries. Keep all your financial history in one account.</p>
+            <button class="primary-button" type="button" data-subscribe="premium" disabled>Choose Premium</button>
+          </article>
+        </div>
+        <p class="plan-note">Billed monthly. Manage or cancel your subscription at any time. Existing entries remain available after cancellation.</p>
+        <div class="account-actions">
+          <button class="secondary-button" type="button" id="manage-subscription" hidden>Manage subscription</button>
+          <button class="secondary-button" type="button" id="refresh-account" hidden>Refresh status</button>
+          <button class="text-button" type="button" id="sign-out" hidden>Sign out</button>
+        </div>
+      </div>
     </dialog>
 
     <div class="toast" id="toast" role="status" aria-live="polite">

@@ -1,5 +1,5 @@
-const CACHE_NAME = "monea-offline-v2";
-const APP_SHELL = ["./", "./index.html", "./styles.css", "./app.js", "./favicon.svg", "./manifest.webmanifest"];
+const CACHE_NAME = "monea-offline-v4";
+const APP_SHELL = ["./", "./index.html", "./styles.css", "./app.js", "./account.js", "./favicon.svg", "./manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -24,6 +24,7 @@ self.addEventListener("fetch", (event) => {
 
   const requestUrl = new URL(event.request.url);
   if (requestUrl.origin !== self.location.origin) return;
+  if (requestUrl.pathname.startsWith("/api/")) return;
 
   if (event.request.mode === "navigate") {
     event.respondWith(
