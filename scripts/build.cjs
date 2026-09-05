@@ -7,7 +7,7 @@ async function buildApp() {
   const output = path.join(root, "dist");
   await mkdir(output, { recursive: true });
   await Promise.all([
-    ...["index.html", "app.js", "styles.css", "favicon.svg", "manifest.webmanifest", "service-worker.js"]
+    ...["index.html", "pricing.html", "category-policy.js", "app.js", "styles.css", "favicon.svg", "manifest.webmanifest", "service-worker.js"]
       .map((file) => copyFile(path.join(root, file), path.join(output, file))),
     build({
       entryPoints: [path.join(root, "client/account.js")],

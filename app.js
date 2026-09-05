@@ -153,6 +153,7 @@ function normalizeTransaction(item) {
     || note.length > 100
     || !["expense", "income", "savings"].includes(type)
     || !category
+    || (type !== "savings" && !CategoryPolicy.normalize(type, category))
     || (type === "expense" && ["income", "savings"].includes(category.toLowerCase()))
     || !Number.isFinite(amount) || amount <= 0 || amount > 999999999.99
     || !validDate) return null;
@@ -162,7 +163,7 @@ function normalizeTransaction(item) {
     name,
     note,
     type,
-    category: type === "income" ? "Income" : type === "savings" ? "Savings" : category,
+    category: type === "savings" ? "Savings" : category,
     amount: Math.round(amount * 100) / 100,
     date,
     paid: type === "expense" && category === "Debt Repayment" && item.paid === true,
@@ -184,7 +185,8 @@ function addMissingHistory(transactions) {
 
 function loadTransactions() {
   try {
-    const saved = normalizeTransactionList(JSON.parse(localStorage.getItem(STORAGE_KEY)));
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    const saved = normalizeTransactionList(Array.isArray(stored) ? stored : stored?.transactions);
     if (saved) return saved;
 
     for (const key of LEGACY_STORAGE_KEYS) {
@@ -233,9 +235,19 @@ function loadCustomCategories(transactions) {
 
 const initialTransactions = loadTransactions();
 
+function loadCategoryRegistry(transactions) {
+  let saved = [];
+  try {
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    saved = Array.isArray(stored?.categories) ? stored.categories
+      : loadCustomCategories(transactions).map((name) => ({ type: "expense", name }));
+  } catch { /* Recover categories from the ledger below. */ }
+  return CategoryPolicy.merge(saved, CategoryPolicy.fromTransactions(transactions));
+}
+
 const state = {
   transactions: initialTransactions,
-  customCategories: loadCustomCategories(initialTransactions),
+  categories: loadCategoryRegistry(initialTransactions),
   selectedMonth: currentMonth,
   typeFilter: "all",
   categoryFilter: "all",
@@ -285,36 +297,32 @@ const elements = {
 let localSnapshot;
 try { localSnapshot = localStorage.getItem(STORAGE_KEY); } catch { localSnapshot = null; }
 
-async function saveTransactions(transactions) {
+async function saveTransactions(transactions, extraCategories = []) {
   const account = window.MoneaAccount;
   const identity = account?.identity;
+  const expectedSnapshot = localSnapshot;
   try {
     if (!account || account.mode === "loading") throw new Error("Wait for account settings to finish loading.");
+    const categories = CategoryPolicy.merge(state.categories, [...extraCategories, ...CategoryPolicy.fromTransactions(transactions)]);
     if (account.mode === "account") {
       await account.save(transactions);
       return true;
     }
     const persist = () => {
       if (account.identity !== identity || account.mode !== "guest") throw new Error("Your account changed. Please try again.");
-      if (localStorage.getItem(STORAGE_KEY) !== localSnapshot) {
+      if (localStorage.getItem(STORAGE_KEY) !== expectedSnapshot) {
         refreshSharedData();
         throw new Error("Another tab changed your data. The latest version has been loaded; try again.");
       }
-      const counts = new Map();
-      for (const item of transactions) {
-        if (!["income", "expense"].includes(item.type)) continue;
-        const key = `${item.type}:${item.date.slice(0, 7)}`;
-        counts.set(key, (counts.get(key) || 0) + 1);
-      }
-      for (const [key, count] of counts) {
-        const [type, month] = key.split(":");
-        const previous = state.transactions.filter((item) => item.type === type && item.date.startsWith(month)).length;
-        if (count > 5 && count > previous) throw new Error("The local demo allows five income and five expense entries per month. Sign in and choose Premium for unlimited entries.");
-      }
-      const serialized = JSON.stringify(transactions);
+      const canonicalTransactions = transactions.map((item) => {
+        const category = categories.find((candidate) => candidate.type === item.type && candidate.name.toLowerCase() === item.category.toLowerCase());
+        return category ? { ...item, category: category.name } : item;
+      });
+      const serialized = JSON.stringify({ transactions: canonicalTransactions, categories });
       localStorage.setItem(STORAGE_KEY, serialized);
       localSnapshot = serialized;
-      state.transactions = transactions;
+      state.transactions = canonicalTransactions;
+      state.categories = categories;
     };
     if (navigator.locks) await navigator.locks.request("monea-local-transactions", persist);
     else persist();
@@ -325,31 +333,9 @@ async function saveTransactions(transactions) {
   }
 }
 
-function saveCustomCategories() {
-  if (window.MoneaAccount?.mode !== "guest") return;
-  try {
-    localStorage.setItem(CUSTOM_CATEGORIES_STORAGE_KEY, JSON.stringify(state.customCategories));
-  } catch {
-    showToast("Storage unavailable", "Custom categories will last only until this tab is closed.");
-  }
-}
-
-function registerCustomCategories(transactions) {
-  let changed = false;
-  transactions.forEach((transaction) => {
-    const category = normalizeCategoryName(transaction.category);
-    if (transaction.type !== "expense" || !isCustomExpenseCategory(category)) return;
-    if (state.customCategories.some((item) => item.toLowerCase() === category.toLowerCase())) return;
-    state.customCategories.push(category);
-    changed = true;
-  });
-  if (changed) saveCustomCategories();
-  return changed;
-}
-
 function canonicalAvailableCategoryName(value) {
   const category = normalizeCategoryName(value);
-  return [...builtInCategories, ...state.customCategories]
+  return [...builtInCategories, ...state.categories.map((item) => item.name)]
     .find((name) => name.toLowerCase() === category.toLowerCase()) ?? category;
 }
 
@@ -360,20 +346,23 @@ function replaceCategoryOptions(select, options, fallbackValue) {
 }
 
 function renderCategoryOptions() {
-  const expenseCategories = [...defaultExpenseCategories, ...state.customCategories];
+  const type = elements.form.querySelector('input[name="type"]:checked').value;
+  const existing = state.categories.filter((item) => item.type === type).map((item) => item.name);
+  const suggestions = type === "income" ? ["Income", "Salary", "Freelance"] : defaultExpenseCategories;
+  const available = type === "savings" ? ["Savings"]
+    : [...new Set([...existing, ...suggestions.filter((name) => !existing.some((item) => item.toLowerCase() === name.toLowerCase()))])];
   replaceCategoryOptions(elements.formCategory, [
     { label: "Select category", value: "" },
-    ...expenseCategories.map((category) => ({ label: category, value: category })),
-    { label: "+ Add custom category", value: CUSTOM_CATEGORY_VALUE },
-    { label: "Income", value: "Income" },
-    { label: "Savings", value: "Savings" },
-  ], "");
+    ...available.map((category) => ({ label: category, value: category })),
+    ...(type !== "savings" ? [{ label: "+ Add category", value: CUSTOM_CATEGORY_VALUE }] : []),
+  ], type === "savings" ? "Savings" : type === "income" ? available[0] || "" : "");
+  if (type !== "expense" && !elements.formCategory.value) elements.formCategory.value = available[0] || "";
   replaceCategoryOptions(elements.category, [
     { label: "All categories", value: "all" },
-    ...expenseCategories.map((category) => ({ label: category, value: category })),
-    { label: "Income", value: "Income" },
+    ...[...new Set(state.categories.map((item) => item.name))].map((name) => ({ label: name, value: name })),
     { label: "Savings", value: "Savings" },
   ], "all");
+  updateCustomCategoryField();
 }
 
 function updateCustomCategoryField({ focus = false } = {}) {
@@ -663,15 +652,10 @@ function renderAccountUsage() {
     usage.textContent = "Please wait before saving changes.";
     return;
   }
-  const entries = transactionsForMonth();
-  const income = entries.filter((item) => item.type === "income").length;
-  const expense = entries.filter((item) => item.type === "expense").length;
-  status.textContent = account.mode === "guest" ? "Local demo · Sign in to subscribe"
-    : account.plan === "premium" ? "Premium · $5 USD/month"
-      : account.plan === "normal" ? "Normal · $1 USD/month" : "No active subscription";
-  usage.textContent = account.mode === "account" && account.plan === "none"
-    ? "Choose a plan to add entries. Your existing data is available to view and export."
-    : `${monthLabel(state.selectedMonth)}: ${income}${account.plan === "premium" ? "" : "/5"} income entries · ${expense}${account.plan === "premium" ? "" : "/5"} expense entries${account.plan === "premium" ? " · Unlimited" : ""}.${account.mode === "guest" ? " Saved only in this browser." : ""}`;
+  const income = state.categories.filter((item) => item.type === "income").length;
+  const expense = state.categories.filter((item) => item.type === "expense").length;
+  status.textContent = account.mode === "guest" ? "Free · Saved on this device" : "Free · Synced to your account";
+  usage.textContent = `${income} income categories · ${expense} expense categories · Unlimited categories and transactions.${account.mode === "guest" ? " Sign in to sync across devices." : ""}`;
 }
 
 function defaultDateForSelectedMonth() {
@@ -680,6 +664,7 @@ function defaultDateForSelectedMonth() {
 }
 
 function openDialog() {
+  renderCategoryOptions();
   elements.date.max = todayKey;
   elements.date.value = defaultDateForSelectedMonth();
   elements.dialog.showModal();
@@ -689,7 +674,7 @@ function openDialog() {
 function closeDialog() {
   elements.dialog.close();
   elements.form.reset();
-  updateCustomCategoryField();
+  renderCategoryOptions();
 }
 
 let toastTimer;
@@ -710,14 +695,14 @@ async function addTransaction(form) {
   const data = new FormData(form);
   const type = String(data.get("type") ?? "");
   const selectedCategory = String(data.get("category") ?? "");
-  const category = type === "expense" && selectedCategory === CUSTOM_CATEGORY_VALUE
+  const category = type !== "savings" && selectedCategory === CUSTOM_CATEGORY_VALUE
     ? canonicalAvailableCategoryName(data.get("customCategory"))
     : selectedCategory;
   const transaction = normalizeTransaction({
     id: `t-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     name: String(data.get("name") ?? ""),
     note: String(data.get("note") ?? ""),
-    category: type === "income" ? "Income" : type === "savings" ? "Savings" : category,
+    category: type === "savings" ? "Savings" : category,
     type,
     amount: Number(data.get("amount")),
     date: String(data.get("date") ?? ""),
@@ -729,10 +714,9 @@ async function addTransaction(form) {
   }
 
   if (!await saveTransactions([...state.transactions, transaction])) return;
-  const categoryAdded = registerCustomCategories([transaction]);
   state.selectedMonth = transaction.date.slice(0, 7);
   state.visibleLimit = 6;
-  if (categoryAdded) renderCategoryOptions();
+  renderCategoryOptions();
   renderAll();
   closeDialog();
   showToast("Transaction added", `${transaction.name} was saved to ${monthLabel(state.selectedMonth)}.`);
@@ -908,7 +892,7 @@ async function importCsv(event) {
       saving: "savings",
       savings: "savings",
     };
-    const categoryNames = [...builtInCategories, ...state.customCategories];
+    const categoryNames = [...builtInCategories, ...state.categories.map((item) => item.name)];
     const existing = new Set(state.transactions.map(transactionFingerprint));
     const imported = [];
     let invalidCount = 0;
@@ -923,7 +907,6 @@ async function importCsv(event) {
       const type = typeAliases[cleanText(row[columns.type]).toLowerCase()] ?? "";
       const rawCategory = cleanText(row[columns.category]);
       let category = categoryNames.find((name) => name.toLowerCase() === rawCategory.toLowerCase()) ?? rawCategory;
-      if (type === "income") category = "Income";
       if (type === "savings") category = "Savings";
       const rawAmount = cleanText(row[columns.amount]).replace(/^PHP\s*/i, "").replace(/[₱,\s]/g, "");
       const transaction = normalizeTransaction({
@@ -963,10 +946,9 @@ async function importCsv(event) {
 
     if (window.MoneaAccount?.identity !== identity) throw new Error("Your account changed. Select the file again.");
     if (!await saveTransactions([...state.transactions, ...imported])) return;
-    const categoriesAdded = registerCustomCategories(imported);
     state.selectedMonth = imported.map((transaction) => transaction.date.slice(0, 7)).sort().at(-1);
     state.visibleLimit = 6;
-    if (categoriesAdded) renderCategoryOptions();
+    renderCategoryOptions();
     renderAll();
     showToast("CSV imported", `${imported.length} transactions added${skipped ? `; ${skipped} rows skipped` : ""}.`);
   } catch (error) {
@@ -995,7 +977,7 @@ function exportSelectedMonth() {
 document.querySelector("#today-label").textContent = fullDateFormatter.format(today);
 const currentHour = today.getHours();
 const greeting = currentHour < 12 ? "Good morning" : currentHour < 18 ? "Good afternoon" : "Good evening";
-document.querySelector("#greeting").textContent = `${greeting}, Financial User.`;
+document.querySelector("#greeting").textContent = `${greeting}, Welcome to Perfi.`;
 
 document.querySelectorAll("[data-open-dialog]").forEach((button) => button.addEventListener("click", openDialog));
 document.querySelectorAll("[data-close-dialog]").forEach((button) => button.addEventListener("click", closeDialog));
@@ -1085,16 +1067,22 @@ document.querySelector("#manage-budgets").addEventListener("click", () => {
 });
 
 document.querySelectorAll('input[name="type"]').forEach((input) => {
-  input.addEventListener("change", (event) => {
-    const category = elements.formCategory;
-    if (event.target.value === "income") category.value = "Income";
-    else if (event.target.value === "savings") category.value = "Savings";
-    else if (["Income", "Savings"].includes(category.value)) category.value = "";
-    updateCustomCategoryField();
-  });
+  input.addEventListener("change", renderCategoryOptions);
 });
 
 elements.formCategory.addEventListener("change", () => updateCustomCategoryField({ focus: true }));
+
+document.querySelector("#export-history").addEventListener("click", async () => {
+  const account = window.MoneaAccount;
+  if (!account || account.mode === "loading") return;
+  try {
+    const { transactions } = account.mode === "account" ? await account.historyReport() : { transactions: state.transactions };
+    const rows = [["Date", "Type", "Name", "Category", "Note", "Amount (PHP)", "Loan paid"],
+      ...transactions.map((item) => [item.date, item.type, item.name, item.category, item.note, item.amount, item.paid])];
+    downloadFile(`\uFEFF${rows.map((row) => row.map(csvCell).join(",")).join("\n")}`, "text/csv;charset=utf-8", `perfi-full-history-${todayKey}.csv`);
+    showToast("Report exported", "Your full financial history was downloaded.");
+  } catch (error) { showToast("Report unavailable", error.message); }
+});
 
 elements.previousMonth.addEventListener("click", () => selectMonth(offsetMonth(state.selectedMonth, -1)));
 elements.nextMonth.addEventListener("click", () => selectMonth(offsetMonth(state.selectedMonth, 1)));
@@ -1125,14 +1113,15 @@ function refreshSharedData() {
   if (window.MoneaAccount?.mode !== "guest") return;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    const transactions = raw === null ? [] : normalizeTransactionList(JSON.parse(raw));
+    const stored = JSON.parse(raw);
+    const transactions = raw === null ? [] : normalizeTransactionList(Array.isArray(stored) ? stored : stored?.transactions);
     if (!transactions) {
       showToast("Refresh failed", "Another tab saved invalid data. Your current view has been preserved.");
       return;
     }
     state.transactions = transactions;
     localSnapshot = raw;
-    state.customCategories = loadCustomCategories(transactions);
+    state.categories = loadCategoryRegistry(transactions);
     renderCategoryOptions();
     renderAll();
   } catch {
@@ -1153,10 +1142,10 @@ document.addEventListener("monea:account", (event) => {
   if (mode === "guest") {
     state.transactions = loadTransactions();
     try { localSnapshot = localStorage.getItem(STORAGE_KEY); } catch { localSnapshot = null; }
-    state.customCategories = loadCustomCategories(state.transactions);
+    state.categories = loadCategoryRegistry(state.transactions);
   } else {
     state.transactions = account?.transactions || [];
-    state.customCategories = [...new Set(state.transactions.map((item) => item.category).filter(isCustomExpenseCategory))];
+    state.categories = CategoryPolicy.merge(account?.categories || [], CategoryPolicy.fromTransactions(state.transactions));
   }
   renderCategoryOptions();
   state.categoryFilter = elements.category.value;

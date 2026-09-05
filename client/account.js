@@ -10,7 +10,6 @@ let mode = "loading";
 let generation = 0;
 let saving = false;
 let refreshing = false;
-let billingBusy = false;
 
 function publish() {
   document.dispatchEvent(new CustomEvent("monea:account", { detail: { mode, account, user } }));
@@ -20,18 +19,10 @@ function publish() {
 function render() {
   document.querySelector("#profile-name").textContent = user?.email || "Financial User";
   document.querySelector("#profile-plan").textContent = mode === "loading" ? "Loading account…"
-    : account?.plan === "premium" ? "Premium · $5/month"
-      : account?.plan === "normal" ? "Normal · $1/month" : user ? "No active subscription" : "Local demo";
+    : "Free access";
   document.querySelector("#sign-in-form").hidden = !config?.configured || Boolean(user);
   document.querySelector("#sign-out").hidden = !user;
   document.querySelector("#refresh-account").hidden = !user;
-  document.querySelector("#manage-subscription").hidden = !account?.hasCustomer;
-  document.querySelector("#manage-subscription").disabled = billingBusy || !config?.billingConfigured;
-  document.querySelectorAll("[data-subscribe]").forEach((button) => {
-    const current = account?.plan === button.dataset.subscribe;
-    button.disabled = billingBusy || !config?.billingConfigured || mode !== "account" || current;
-    button.textContent = current ? "Current plan" : `Choose ${button.dataset.subscribe === "normal" ? "Normal" : "Premium"}`;
-  });
 }
 
 async function request(path, options = {}) {
@@ -65,7 +56,7 @@ async function refresh() {
     if (expected !== generation) return;
     account = next;
     mode = "account";
-    message.textContent = `${user.email}. ${account.plan === "none" ? "Choose a plan to add entries. Your account starts with an empty ledger; you can import a CSV after subscribing." : "Your subscription and financial data are synced to your account."}`;
+    message.textContent = `${user.email}. All features are free. Your financial data is synced to your account.`;
     publish();
   } catch (error) {
     if (expected === generation) message.textContent = error.message;
@@ -84,7 +75,7 @@ function acceptSession(session) {
   mode = user ? "loading" : "guest";
   saving = false;
   refreshing = false;
-  message.textContent = user ? "Loading your account…" : "Sign in by email to subscribe and sync your data across devices.";
+  message.textContent = user ? "Loading your account…" : "Sign in by email to sync your data across devices. All features are free.";
   publish();
   // Keep asynchronous auth calls outside Supabase's auth-state lock.
   if (user) setTimeout(() => { void refresh().catch(() => {}); }, 0);
@@ -93,22 +84,25 @@ function acceptSession(session) {
 window.MoneaAccount = {
   get mode() { return mode; },
   get identity() { return user?.id || "guest"; },
-  get plan() { return account?.plan || "none"; },
+  get plan() { return "free"; },
   open() { dialog.showModal(); },
   refresh,
-  async save(transactions) {
+  save(transactions) { return window.MoneaAccount.mutate("transactions", "PUT", { transactions }); },
+  createCategory(category) { return window.MoneaAccount.mutate("categories", "POST", category); },
+  historyReport() { return request("reports/history"); },
+  async mutate(path, method, body) {
     if (mode !== "account") throw new Error("Wait for your account to finish loading.");
     if (saving || refreshing) throw new Error("An account update is in progress. Please try again.");
     const expected = generation;
     saving = true;
     try {
-      const next = await request("transactions", { method: "PUT", body: JSON.stringify({ transactions, revision: account.revision }) });
+      const next = await request(path, { method, body: JSON.stringify({ ...body, revision: account.revision }) });
       if (expected !== generation) throw new Error("Your account changed. Please try again.");
       account = { ...account, ...next };
       publish();
       try { localStorage.setItem("monea-account-update", JSON.stringify({ userId: user.id, nonce: crypto.randomUUID() })); } catch { /* Polling still refreshes other sessions. */ }
     } catch (error) {
-      if (expected === generation && error.status === 409) {
+      if (expected === generation && [403, 409].includes(error.status)) {
         saving = false;
         await refresh();
       }
@@ -142,24 +136,6 @@ document.querySelector("#sign-out").addEventListener("click", async () => {
 });
 document.querySelector("#refresh-account").addEventListener("click", () => { void refresh().catch(() => {}); });
 
-async function billing(path, body) {
-  if (billingBusy) return;
-  billingBusy = true;
-  render();
-  message.textContent = "Opening secure billing…";
-  try {
-    const data = await request(path, { method: "POST", body: JSON.stringify(body || {}) });
-    const url = new URL(data.url);
-    if (url.protocol !== "https:" || !["checkout.stripe.com", "billing.stripe.com"].includes(url.hostname)) throw new Error("Invalid billing link.");
-    location.assign(url.href);
-  } catch (error) { message.textContent = error.message; }
-  finally { billingBusy = false; render(); }
-}
-
-document.querySelectorAll("[data-subscribe]").forEach((button) => button.addEventListener("click", () => {
-  void billing(account?.plan !== "none" ? "billing/portal" : "billing/checkout", { plan: button.dataset.subscribe });
-}));
-document.querySelector("#manage-subscription").addEventListener("click", () => { void billing("billing/portal"); });
 window.addEventListener("storage", (event) => {
   if (event.key !== "monea-account-update" || !user) return;
   try { if (JSON.parse(event.newValue)?.userId === user.id) void refresh().catch(() => {}); } catch { /* Ignore malformed notifications. */ }
@@ -173,21 +149,17 @@ async function initialize() {
     const response = await fetch("/api/config", { cache: "no-store" });
     if (!response.ok) throw new Error("Account services are unavailable. Your local demo is still available.");
     config = await response.json();
-    if (!config.configured) throw new Error("Subscriptions are not available yet. Your local demo is still available.");
+    if (!config.configured) throw new Error("Sign-in is not configured yet. You can still use all features on this device.");
     client = createClient(config.supabaseUrl, config.supabaseAnonKey, {
       auth: { flowType: "pkce", detectSessionInUrl: true, persistSession: true, autoRefreshToken: true },
     });
     client.auth.onAuthStateChange((_event, session) => { acceptSession(session); });
     const { error } = await client.auth.getSession();
     if (error) throw error;
-    const billingReturn = new URL(location.href).searchParams.get("billing");
-    if (billingReturn) {
-      dialog.showModal();
-      message.textContent = billingReturn === "success"
-        ? "Checkout finished. Waiting for payment confirmation; use Refresh status if your plan has not updated yet."
-        : billingReturn === "canceled" ? "Checkout was canceled. Your plan has not changed." : "Checking your subscription…";
-      const url = new URL(location.href);
+    const url = new URL(location.href);
+    if (url.searchParams.has("billing") || url.searchParams.has("plan")) {
       url.searchParams.delete("billing");
+      url.searchParams.delete("plan");
       history.replaceState(null, "", url);
     }
   } catch (error) {
