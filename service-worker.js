@@ -1,4 +1,4 @@
-const CACHE_NAME = "monea-offline-v8";
+const CACHE_NAME = "monea-offline-v9";
 const APP_SHELL = ["./", "./index.html", "./pricing.html", "./styles.css", "./category-policy.js", "./app.js", "./account.js", "./favicon.svg", "./manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
@@ -34,6 +34,14 @@ self.addEventListener("fetch", (event) => {
   }
 
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request)),
+    fetch(event.request)
+      .then(async (response) => {
+        if (response.ok) {
+          const cache = await caches.open(CACHE_NAME);
+          await cache.put(event.request, response.clone());
+        }
+        return response;
+      })
+      .catch(() => caches.match(event.request)),
   );
 });

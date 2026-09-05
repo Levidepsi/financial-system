@@ -18,6 +18,27 @@ function result({ data, error }) {
   return data;
 }
 
+function firstHeader(value) {
+  return (Array.isArray(value) ? value[0] : value)?.split(",")[0]?.trim();
+}
+
+function hasTrustedOrigin(req, env) {
+  const supplied = firstHeader(req.headers.origin);
+  if (!supplied) return true;
+  if (firstHeader(req.headers["sec-fetch-site"]) === "same-origin") return true;
+  let origin;
+  try { origin = new URL(supplied).origin; } catch { return false; }
+  const allowed = new Set();
+  try { if (env.APP_URL) allowed.add(new URL(env.APP_URL).origin); } catch { /* Fall back to the request host. */ }
+  const host = firstHeader(req.headers["x-forwarded-host"]) || firstHeader(req.headers.host);
+  if (host) {
+    const protocol = firstHeader(req.headers["x-forwarded-proto"])
+      || (/^(localhost|127\.0\.0\.1)(:|$)/i.test(host) ? "http" : "https");
+    try { allowed.add(new URL(`${protocol}://${host}`).origin); } catch { /* Ignore malformed proxy headers. */ }
+  }
+  return allowed.has(origin);
+}
+
 async function rawBody(req) {
   // Never access Vercel's lazy req.body helper: signatures require the
   // original bytes. Vercel restores these on the data/end event stream.
@@ -72,10 +93,37 @@ function createHandler({ env = process.env, db: providedDb } = {}) {
           supabaseAnonKey: authConfigured() ? env.SUPABASE_ANON_KEY : null }));
         return;
       }
+      if (route === "auth/register") {
+        if (req.method !== "POST") { res.setHeader("Allow", "POST"); throw new HttpError(405, "Method not allowed."); }
+        if (!hasTrustedOrigin(req, env)) {
+          throw new HttpError(403, "Unrecognized request origin.");
+        }
+        const body = await jsonBody(req);
+        const email = typeof body?.email === "string" ? body.email.trim() : "";
+        const password = typeof body?.password === "string" ? body.password : "";
+        if (!email || email.length > 254 || !email.includes("@") || /[\u0000-\u001f\u007f]/.test(email)) {
+          throw new HttpError(400, "Enter a valid email address.");
+        }
+        if (password.length < 8 || password.length > 72) {
+          throw new HttpError(400, "Use a password between 8 and 72 characters.");
+        }
+        const { error } = await database().auth.admin.createUser({ email, password, email_confirm: true });
+        if (error) {
+          if (["email_exists", "user_already_exists"].includes(error.code)
+            || /already (been )?registered|already exists/i.test(error.message || "")) {
+            throw new HttpError(409, "An account already exists for this email. Sign in instead.");
+          }
+          if (error.status && error.status < 500) throw new HttpError(400, error.message || "Could not create the account.");
+          throw new HttpError(503, "Could not create the account. Please try again.");
+        }
+        res.statusCode = 201;
+        res.end(JSON.stringify({ created: true }));
+        return;
+      }
       const allowed = { account: "GET", transactions: "PUT", categories: "POST", "reports/history": "GET" };
       if (!Object.hasOwn(allowed, route)) throw new HttpError(404, "Not found.");
       if (req.method !== allowed[route]) { res.setHeader("Allow", allowed[route]); throw new HttpError(405, "Method not allowed."); }
-      if (req.method !== "GET" && req.headers.origin && (!env.APP_URL || req.headers.origin !== new URL(env.APP_URL).origin)) {
+      if (req.method !== "GET" && !hasTrustedOrigin(req, env)) {
         throw new HttpError(403, "Unrecognized request origin.");
       }
       const token = req.headers.authorization?.match(/^Bearer (.+)$/)?.[1];

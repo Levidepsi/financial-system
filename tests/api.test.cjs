@@ -26,6 +26,31 @@ test("public config never exposes service or Stripe secrets", async () => {
   assert.match(response.headers["Cache-Control"], /no-store/);
 });
 
+test("registration creates a confirmed password user without sending email", async () => {
+  let created;
+  const db = { auth: { admin: { createUser: async (value) => { created = value; return { data: { user: { id: "new-user" } } }; } } } };
+  const response = await invoke(createHandler({ env, db }), "auth/register", { method: "POST",
+    headers: { origin: "https://free-preview.vercel.app", host: "free-preview.vercel.app", "x-forwarded-proto": "https", "content-type": "application/json" },
+    body: { email: " new@example.com ", password: "test-password-123" } });
+  assert.equal(response.status, 201);
+  assert.deepEqual(response.body, { created: true });
+  assert.deepEqual(created, { email: "new@example.com", password: "test-password-123", email_confirm: true });
+});
+
+test("registration validates input, origin, method, and duplicate users", async () => {
+  const duplicate = { auth: { admin: { createUser: async () => ({ error: { code: "email_exists", status: 422 } }) } } };
+  const handler = createHandler({ env, db: duplicate });
+  const headers = { origin: env.APP_URL, "content-type": "application/json" };
+  assert.equal((await invoke(handler, "auth/register", { method: "GET" })).status, 405);
+  assert.equal((await invoke(handler, "auth/register", { method: "POST", headers: { ...headers, origin: "https://evil.example", host: "monea.example" }, body: {} })).status, 403);
+  assert.equal((await invoke(handler, "auth/register", { method: "POST", headers, body: { email: "invalid", password: "test-password-123" } })).status, 400);
+  assert.equal((await invoke(handler, "auth/register", { method: "POST", headers, body: { email: "new@example.com", password: "short" } })).status, 400);
+  const response = await invoke(handler, "auth/register", { method: "POST", headers,
+    body: { email: "member@example.com", password: "test-password-123" } });
+  assert.equal(response.status, 409);
+  assert.match(response.body.error, /already exists/);
+});
+
 test("old checkout, portal, and webhook routes are disabled even with Stripe credentials", async () => {
   const handler = createHandler({ env });
   for (const path of ["billing/checkout", "billing/portal", "stripe/webhook"]) {
