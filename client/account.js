@@ -10,6 +10,8 @@ let mode = "loading";
 let generation = 0;
 let saving = false;
 let refreshing = false;
+let creatingAccount = false;
+let authenticating = false;
 
 function publish() {
   document.dispatchEvent(new CustomEvent("monea:account", { detail: { mode, account, user } }));
@@ -75,7 +77,7 @@ function acceptSession(session) {
   mode = user ? "loading" : "guest";
   saving = false;
   refreshing = false;
-  message.textContent = user ? "Loading your account…" : "Sign in by email to sync your data across devices. All features are free.";
+  message.textContent = user ? "Loading your account…" : "Sign in with your email and password to sync your data across devices. All features are free.";
   publish();
   // Keep asynchronous auth calls outside Supabase's auth-state lock.
   if (user) setTimeout(() => { void refresh().catch(() => {}); }, 0);
@@ -116,19 +118,41 @@ window.MoneaAccount = {
 document.querySelectorAll("[data-open-account]").forEach((button) => button.addEventListener("click", () => dialog.showModal()));
 document.querySelector("#close-account").addEventListener("click", () => dialog.close());
 dialog.addEventListener("click", (event) => { if (event.target === dialog) dialog.close(); });
+document.querySelector("#account-toggle").addEventListener("click", () => {
+  creatingAccount = !creatingAccount;
+  const password = document.querySelector("#account-password");
+  password.autocomplete = creatingAccount ? "new-password" : "current-password";
+  password.minLength = creatingAccount ? 8 : 1;
+  password.value = "";
+  document.querySelector("#account-submit").textContent = creatingAccount ? "Create account" : "Sign in";
+  document.querySelector("#account-toggle").textContent = creatingAccount ? "Already have an account? Sign in" : "Create an account";
+  message.textContent = creatingAccount ? "Create an account with your email and a password of at least 8 characters." : "Sign in with your email and password.";
+});
+
 document.querySelector("#sign-in-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const button = event.currentTarget.querySelector("button");
-  button.disabled = true;
+  if (authenticating) return;
+  authenticating = true;
+  const controls = [...event.currentTarget.querySelectorAll("button, input")];
+  controls.forEach((control) => { control.disabled = true; });
+  message.textContent = creatingAccount ? "Creating your account…" : "Signing in…";
   try {
-    const { error } = await client.auth.signInWithOtp({
+    const credentials = {
       email: document.querySelector("#account-email").value.trim(),
-      options: { emailRedirectTo: `${location.origin}/` },
-    });
+      password: document.querySelector("#account-password").value,
+    };
+    const { data, error } = creatingAccount
+      ? await client.auth.signUp(credentials)
+      : await client.auth.signInWithPassword(credentials);
     if (error) throw error;
-    message.textContent = "Check your email for a sign-in link. Open it in this browser to continue.";
+    document.querySelector("#account-password").value = "";
+    if (data.session) acceptSession(data.session);
+    else message.textContent = "Check your email to confirm your account, then sign in with your password.";
   } catch (error) { message.textContent = error.message; }
-  finally { button.disabled = false; }
+  finally {
+    authenticating = false;
+    controls.forEach((control) => { control.disabled = false; });
+  }
 });
 document.querySelector("#sign-out").addEventListener("click", async () => {
   const { error } = await client.auth.signOut({ scope: "local" });

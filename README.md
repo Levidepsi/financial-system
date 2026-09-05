@@ -18,7 +18,9 @@ Use Node.js 22 or later. Run npm ci, then npm run dev, and open http://127.0.0.1
 
 Copy .env.example to .env.local and set APP_URL, SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY. The public key is used for email sign-in; the service-role key stays on the server. Stripe keys are not needed. The server serves only the files built into dist.
 
-Enable email sign-in in Supabase. Configure its Site URL and redirect allowlist for your production origin and http://127.0.0.1:5500/ when developing locally. Sign-in links use PKCE and should be opened in the browser that requested them. Configure production email delivery before inviting users.
+Enable the Email provider and new user signups in Supabase Authentication. The Account dialog supports email/password sign-in and a separate Create account option (minimum 8 characters, subject to your Supabase password policy). To create accounts and sign in without email delivery, disable **Confirm Email** in Supabase Authentication settings. This assumes email addresses are unverified. With confirmation enabled, signup asks the user to confirm by email before signing in. Configure Site URL and redirect allowlist for your production origin and http://127.0.0.1:5500/ when developing locally.
+
+Existing magic-link users need a password set through a trusted Supabase recovery or administrative process before using password sign-in. Creating an account with an existing email does not reset its password or grant access to its data. Passwords are sent directly to Supabase Auth; the app continues using Supabase sessions for cloud data access.
 
 ## Accounts and data
 
