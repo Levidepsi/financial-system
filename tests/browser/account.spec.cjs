@@ -204,7 +204,7 @@ test("old pricing URL explains free access without paid plans", async ({ page })
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
-for (const scenario of ["signin", "signup", "confirmation", "invalid"]) {
+for (const scenario of ["signin", "signup", "duplicate", "invalid"]) {
 test(`password authentication: ${scenario}`, async ({ page, context }) => {
   await context.route("**/api/config", route => route.fulfill({ json: {
     configured: true, billingConfigured: false, supabaseUrl: "https://example.supabase.co", supabaseAnonKey: "public",
@@ -216,15 +216,19 @@ test(`password authentication: ${scenario}`, async ({ page, context }) => {
     credentials = route.request().postDataJSON();
     authPath = new URL(route.request().url());
     if (scenario === "invalid") return route.fulfill({ status: 400, json: { code: "invalid_credentials", msg: "Invalid login credentials" } });
-    if (scenario === "confirmation") return route.fulfill({ json: { user, session: null } });
     return route.fulfill({ json: { user, access_token: "test-token", refresh_token: "refresh", expires_in: 3600, token_type: "bearer" } });
+  });
+  await context.route("**/api/auth/register", route => {
+    credentials = route.request().postDataJSON();
+    if (scenario === "duplicate") return route.fulfill({ status: 409, json: { error: "An account already exists for this email. Sign in instead." } });
+    return route.fulfill({ status: 201, json: { created: true } });
   });
   await context.route("**/api/account", route => route.fulfill({ json: { user, plan: "free", revision: 0, transactions: [], categories: [] } }));
   await page.goto("/");
   await page.getByRole("button", { name: "Account", exact: true }).click();
   await expect(page.locator("#sign-in-form")).toBeVisible();
   await page.locator("#account-email").fill("member@example.com");
-  const signup = ["signup", "confirmation"].includes(scenario);
+  const signup = ["signup", "duplicate"].includes(scenario);
   if (signup) await page.locator("#account-toggle").click();
   await expect(page.locator("#account-password")).toHaveAttribute("autocomplete", signup ? "new-password" : "current-password");
   await page.locator("#account-password").fill("test-password-123");
@@ -233,15 +237,25 @@ test(`password authentication: ${scenario}`, async ({ page, context }) => {
     await expect(page.locator("#account-message")).toContainText("Invalid login credentials");
     await expect(page.locator("#account-submit")).toBeEnabled();
     await expect(page.locator("#sign-in-form")).toBeVisible();
-  } else if (scenario === "confirmation") {
-    await expect(page.locator("#account-message")).toContainText("Check your email to confirm");
+  } else if (scenario === "duplicate") {
+    await expect(page.locator("#account-message")).toContainText("already exists");
+    await expect(page.locator("#sign-in-form")).toBeVisible();
+  } else if (scenario === "signup") {
+    await expect(page.locator("#account-message")).toContainText("Account created successfully");
+    await expect(page.locator("#account-submit")).toHaveText("Sign in");
+    await expect(page.locator("#account-toggle")).toHaveText("Create an account");
+    await expect(page.locator("#account-password")).toHaveAttribute("autocomplete", "current-password");
+    await expect(page.locator("#account-password")).toBeFocused();
+    await expect(page.locator("#sign-in-form")).toBeVisible();
   } else {
     await expect(page.locator("#account-status")).toContainText("Synced to your account");
     await expect(page.locator("#sign-in-form")).toBeHidden();
   }
   expect(credentials.email).toBe("member@example.com");
   expect(credentials.password).toBe("test-password-123");
-  expect(authPath.pathname).toBe(signup ? "/auth/v1/signup" : "/auth/v1/token");
-  if (!signup) expect(authPath.searchParams.get("grant_type")).toBe("password");
+  if (!["duplicate", "signup"].includes(scenario)) {
+    expect(authPath.pathname).toBe("/auth/v1/token");
+    expect(authPath.searchParams.get("grant_type")).toBe("password");
+  }
 });
 }

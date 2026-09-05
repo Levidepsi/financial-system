@@ -118,21 +118,28 @@ window.MoneaAccount = {
 document.querySelectorAll("[data-open-account]").forEach((button) => button.addEventListener("click", () => dialog.showModal()));
 document.querySelector("#close-account").addEventListener("click", () => dialog.close());
 dialog.addEventListener("click", (event) => { if (event.target === dialog) dialog.close(); });
-document.querySelector("#account-toggle").addEventListener("click", () => {
-  creatingAccount = !creatingAccount;
+function setCreatingAccount(value, statusMessage) {
+  creatingAccount = value;
   const password = document.querySelector("#account-password");
   password.autocomplete = creatingAccount ? "new-password" : "current-password";
   password.minLength = creatingAccount ? 8 : 1;
   password.value = "";
   document.querySelector("#account-submit").textContent = creatingAccount ? "Create account" : "Sign in";
   document.querySelector("#account-toggle").textContent = creatingAccount ? "Already have an account? Sign in" : "Create an account";
-  message.textContent = creatingAccount ? "Create an account with your email and a password of at least 8 characters." : "Sign in with your email and password.";
+  message.textContent = statusMessage || (creatingAccount
+    ? "Create an account with your email and a password of at least 8 characters."
+    : "Sign in with your email and password.");
+}
+
+document.querySelector("#account-toggle").addEventListener("click", () => {
+  setCreatingAccount(!creatingAccount);
 });
 
 document.querySelector("#sign-in-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (authenticating) return;
   authenticating = true;
+  let accountCreated = false;
   const controls = [...event.currentTarget.querySelectorAll("button, input")];
   controls.forEach((control) => { control.disabled = true; });
   message.textContent = creatingAccount ? "Creating your account…" : "Signing in…";
@@ -141,17 +148,28 @@ document.querySelector("#sign-in-form").addEventListener("submit", async (event)
       email: document.querySelector("#account-email").value.trim(),
       password: document.querySelector("#account-password").value,
     };
-    const { data, error } = creatingAccount
-      ? await client.auth.signUp(credentials)
-      : await client.auth.signInWithPassword(credentials);
+    if (creatingAccount) {
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(credentials),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Could not create the account.");
+      accountCreated = true;
+      setCreatingAccount(false, "Account created successfully. Sign in with your email and password.");
+      return;
+    }
+    const { data, error } = await client.auth.signInWithPassword(credentials);
     if (error) throw error;
     document.querySelector("#account-password").value = "";
     if (data.session) acceptSession(data.session);
-    else message.textContent = "Check your email to confirm your account, then sign in with your password.";
+    else throw new Error("The account was created, but sign-in did not complete. Please sign in again.");
   } catch (error) { message.textContent = error.message; }
   finally {
     authenticating = false;
     controls.forEach((control) => { control.disabled = false; });
+    if (accountCreated) document.querySelector("#account-password").focus();
   }
 });
 document.querySelector("#sign-out").addEventListener("click", async () => {
