@@ -26,6 +26,37 @@ test("public config never exposes service or Stripe secrets", async () => {
   assert.match(response.headers["Cache-Control"], /no-store/);
 });
 
+test("login notification uses verified email and a stable login key, with no action link", async () => {
+  const user = { id: "real-user", email: "member@example.com", last_sign_in_at: new Date().toISOString() };
+  const db = { auth: { getUser: async () => ({ data: { user } }) } };
+  const calls = [];
+  const handler = createHandler({ env: { ...env, RESEND_API_KEY: "secret", LOGIN_EMAIL_FROM: "Perfi <login@example.com>" }, db,
+    fetch: async (url, options) => { calls.push({ url, ...options }); return { ok: true }; } });
+  const options = { method: "POST", headers: { authorization: "Bearer token", "content-type": "application/json" }, body: { email: "victim@example.com" } };
+  assert.equal((await invoke(handler, "auth/login-notification", options)).body.notification, "sent");
+  await invoke(handler, "auth/login-notification", options);
+  const email = JSON.parse(calls[0].body);
+  assert.deepEqual(email.to, [user.email]);
+  assert.match(email.text, /No action is required/);
+  assert.doesNotMatch(email.text, /https?:\/\//);
+  assert.equal(calls[0].headers["Idempotency-Key"], calls[1].headers["Idempotency-Key"]);
+  user.last_sign_in_at = new Date(Date.now() - 3600000).toISOString();
+  assert.equal((await invoke(handler, "auth/login-notification", options)).status, 400);
+  assert.equal(calls.length, 2);
+  assert.equal((await invoke(handler, "auth/login-notification", { method: "POST" })).status, 401);
+  assert.equal((await invoke(handler, "auth/login-notification", { ...options, headers: { ...options.headers, origin: "https://evil.example" } })).status, 403);
+});
+
+test("login notification tolerates missing configuration and provider failures", async () => {
+  const db = { auth: { getUser: async () => ({ data: { user: { id: "user", email: "member@example.com", last_sign_in_at: new Date().toISOString() } } }) } };
+  for (const settings of [env, { ...env, RESEND_API_KEY: "secret", LOGIN_EMAIL_FROM: "login@example.com" }]) {
+    const handler = createHandler({ env: settings, db, fetch: async () => { throw new Error("offline"); } });
+    const response = await invoke(handler, "auth/login-notification", { method: "POST", headers: { authorization: "Bearer token" } });
+    assert.equal(response.status, 200);
+    assert.equal(response.body.notification, "unavailable");
+  }
+});
+
 test("registration creates a confirmed password user without sending email", async () => {
   let created;
   const db = { auth: { admin: { createUser: async (value) => { created = value; return { data: { user: { id: "new-user" } } }; } } } };

@@ -24,6 +24,10 @@ Existing magic-link users need a password set through a trusted Supabase recover
 
 ## Accounts and data
 
+After a successful password login, the Account dialog displays “Login successful.” To also email the user a plain notification, set `RESEND_API_KEY` and `LOGIN_EMAIL_FROM` in `.env.local` and your deployment environment. Use a sender such as `Perfi <notifications@your-domain.com>` on a verified Resend domain (see [Resend email setup](https://resend.com/docs/api-reference/emails/send-email)). Restart or redeploy after configuring these values. The email contains no confirmation link or button and requires no action. Missing email configuration or delivery failures do not block login. Notification failures are logged by the server; API acceptance does not guarantee inbox delivery.
+
+The notification endpoint verifies the signed-in user, uses their account email, and accepts only logins from the past five minutes. Resend idempotency keys prevent repeat emails for the same login. Reloading the page, refreshing a token, and creating an account do not trigger notifications.
+
 The API verifies the session and derives the user ID from it. Browser roles cannot directly edit account tables or privileged database functions. Making features free does not make financial data public.
 
 New accounts start empty. Existing local data stays on the device; export a monthly CSV and import it after signing in to migrate it. Signing out clears cloud data from the page. Cloud data is never stored in the guest ledger or service-worker cache.

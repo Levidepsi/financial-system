@@ -62,7 +62,7 @@ async function jsonBody(req) {
   catch (error) { if (error instanceof HttpError) throw error; throw new HttpError(400, "Invalid JSON."); }
 }
 
-function createHandler({ env = process.env, db: providedDb } = {}) {
+function createHandler({ env = process.env, db: providedDb, fetch: sendRequest = globalThis.fetch } = {}) {
   let db = providedDb;
   const authConfigured = () => Boolean(env.SUPABASE_URL && env.SUPABASE_ANON_KEY && env.SUPABASE_SERVICE_ROLE_KEY);
   // Billing is deliberately disabled even if old Stripe credentials remain.
@@ -120,7 +120,7 @@ function createHandler({ env = process.env, db: providedDb } = {}) {
         res.end(JSON.stringify({ created: true }));
         return;
       }
-      const allowed = { account: "GET", transactions: "PUT", categories: "POST", "reports/history": "GET" };
+      const allowed = { account: "GET", transactions: "PUT", categories: "POST", "reports/history": "GET", "auth/login-notification": "POST" };
       if (!Object.hasOwn(allowed, route)) throw new HttpError(404, "Not found.");
       if (req.method !== allowed[route]) { res.setHeader("Allow", allowed[route]); throw new HttpError(405, "Method not allowed."); }
       if (req.method !== "GET" && !hasTrustedOrigin(req, env)) {
@@ -131,6 +131,31 @@ function createHandler({ env = process.env, db: providedDb } = {}) {
       const { data: auth, error } = await database().auth.getUser(token);
       if (error || !auth?.user) throw new HttpError(401, "Your session expired. Sign in again.");
       const user = auth.user;
+      if (route === "auth/login-notification") {
+        const signedInAt = Date.parse(user.last_sign_in_at);
+        const age = Date.now() - signedInAt;
+        if (!user.email || !Number.isFinite(age) || age < 0 || age > 5 * 60 * 1000) {
+          throw new HttpError(400, "A recent login is required.");
+        }
+        let notification = "unavailable";
+        if (env.RESEND_API_KEY && env.LOGIN_EMAIL_FROM) {
+          try {
+            const response = await sendRequest("https://api.resend.com/emails", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json",
+                "Idempotency-Key": `login/${user.id}/${signedInAt}` },
+              body: JSON.stringify({ from: env.LOGIN_EMAIL_FROM, to: [user.email],
+                subject: "Login successful — Perfi",
+                text: `You successfully logged in to Perfi on ${new Date(signedInAt).toUTCString()}.\n\nThis is just a notification. No action is required, and you do not need to click anything to complete your login.` }),
+              signal: AbortSignal.timeout(5000),
+            });
+            if (response.ok) notification = "sent";
+            else console.warn("Login notification email was rejected:", response.status);
+          } catch { console.warn("Login notification email could not be sent."); }
+        }
+        res.end(JSON.stringify({ notification }));
+        return;
+      }
       const account = await accountFor(user.id);
       let payload;
       if (route === "account") {
