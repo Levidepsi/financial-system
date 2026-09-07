@@ -12,6 +12,7 @@ let saving = false;
 let refreshing = false;
 let creatingAccount = false;
 let authenticating = false;
+let loginSuccessful = false;
 
 function publish() {
   document.dispatchEvent(new CustomEvent("monea:account", { detail: { mode, account, user } }));
@@ -58,7 +59,7 @@ async function refresh() {
     if (expected !== generation) return;
     account = next;
     mode = "account";
-    message.textContent = `${user.email}. All features are free. Your financial data is synced to your account.`;
+    message.textContent = `${loginSuccessful ? "Login successful. " : ""}${user.email}. All features are free. Your financial data is synced to your account.`;
     publish();
   } catch (error) {
     if (expected === generation) message.textContent = error.message;
@@ -73,6 +74,7 @@ function acceptSession(session) {
   if (nextUser?.id === user?.id && mode !== "loading") return;
   generation += 1;
   user = nextUser;
+  loginSuccessful = false;
   account = null;
   mode = user ? "loading" : "guest";
   saving = false;
@@ -165,6 +167,10 @@ document.querySelector("#sign-in-form").addEventListener("submit", async (event)
     document.querySelector("#account-password").value = "";
     if (data.session) acceptSession(data.session);
     else throw new Error("The account was created, but sign-in did not complete. Please sign in again.");
+    loginSuccessful = true;
+    message.textContent = "Login successful. Welcome to Perfi!";
+    // Only notify after an explicit login, never session restoration or token refresh.
+    void request("auth/login-notification", { method: "POST" }).catch(() => {});
   } catch (error) { message.textContent = error.message; }
   finally {
     authenticating = false;

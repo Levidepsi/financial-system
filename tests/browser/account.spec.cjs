@@ -212,6 +212,11 @@ test(`password authentication: ${scenario}`, async ({ page, context }) => {
   const user = { id: "11111111-1111-4111-8111-111111111111", email: "member@example.com", aud: "authenticated" };
   let credentials;
   let authPath;
+  let notifications = 0;
+  await context.route("**/api/auth/login-notification", route => {
+    notifications += 1;
+    return route.fulfill({ json: { notification: "sent" } });
+  });
   await context.route("https://example.supabase.co/auth/v1/**", route => {
     credentials = route.request().postDataJSON();
     authPath = new URL(route.request().url());
@@ -250,7 +255,12 @@ test(`password authentication: ${scenario}`, async ({ page, context }) => {
   } else {
     await expect(page.locator("#account-status")).toContainText("Synced to your account");
     await expect(page.locator("#sign-in-form")).toBeHidden();
+    await expect(page.locator("#account-message")).toContainText("Login successful");
+    await expect.poll(() => notifications).toBe(1);
+    await page.reload();
+    await expect(page.locator("#account-status")).toContainText("Synced to your account");
   }
+  expect(notifications).toBe(scenario === "signin" ? 1 : 0);
   expect(credentials.email).toBe("member@example.com");
   expect(credentials.password).toBe("test-password-123");
   if (!["duplicate", "signup"].includes(scenario)) {
