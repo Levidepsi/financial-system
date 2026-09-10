@@ -1286,6 +1286,23 @@ tr:hover .delete-button,
   height: 15px;
 }
 
+.transaction-total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+  color: var(--green);
+  font-size: 13px;
+}
+
+.transaction-total strong {
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+
 .table-footer {
   display: flex;
   align-items: center;

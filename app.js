@@ -262,6 +262,8 @@ const elements = {
   empty: document.querySelector("#empty-state"),
   emptyMessage: document.querySelector("#empty-message"),
   tableSummary: document.querySelector("#table-summary"),
+  transactionTotalLabel: document.querySelector("#transaction-total-label"),
+  transactionTotalAmount: document.querySelector("#transaction-total-amount"),
   viewAll: document.querySelector("#view-all"),
   count: document.querySelector("#transaction-count"),
   balance: document.querySelector("#balance-value"),
@@ -492,6 +494,18 @@ function transactionRow(transaction) {
 
 function renderTransactions() {
   const filtered = filteredTransactions();
+  const totalLabels = {
+    all: "Total transaction amount",
+    expense: "Total expenses",
+    income: "Total income",
+    savings: "Total savings",
+    loans: "Total unpaid loans",
+    "paid-loans": "Total paid loans",
+  };
+  elements.transactionTotalLabel.textContent = totalLabels[state.typeFilter];
+  elements.transactionTotalAmount.textContent = formatCurrency.format(
+    filtered.reduce((total, transaction) => total + transaction.amount, 0),
+  );
   const visible = filtered.slice(0, state.visibleLimit);
   const hasFilters = state.typeFilter !== "all" || state.categoryFilter !== "all" || state.search;
   elements.list.innerHTML = visible.map(transactionRow).join("");
