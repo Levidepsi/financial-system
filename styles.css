@@ -2038,8 +2038,14 @@ tr:hover .delete-button,
     display: none;
   }
 
+  .table-footer {
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    padding-block: 8px;
+  }
+
   .table-footer .text-button {
-    display: none;
+    min-height: 44px;
   }
 }
 
