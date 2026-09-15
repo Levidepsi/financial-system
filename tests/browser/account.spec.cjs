@@ -49,6 +49,27 @@ async function signedIn(context, transactions = [], plan = "normal", categories 
   return account;
 }
 
+test("transactions can be edited and deleted with visible controls", async ({ page, context }) => {
+  await guest(context, [{ ...entry("Loan"), paid: true }]);
+  await page.goto("/");
+  await expect(page.locator("#account-status")).toContainText("Saved on this device");
+  await expect(page.getByRole("button", { name: "Delete Loan", exact: true })).toHaveCSS("opacity", "1");
+  await page.getByRole("button", { name: "Edit Loan", exact: true }).click();
+  await expect(page.locator("#dialog-title")).toHaveText("Edit transaction");
+  await expect(page.locator("#amount")).toHaveValue("50");
+  await page.locator('#transaction-form input[name="name"]').fill("Updated loan");
+  await page.locator("#amount").fill("10000");
+  await page.getByRole("button", { name: "Save transaction", exact: true }).click();
+  await expect(page.locator("#transaction-dialog")).not.toBeVisible();
+  await page.reload();
+  await expect(page.locator("#account-status")).toContainText("Saved on this device");
+  await expect(page.locator("#transaction-list tr")).toHaveCount(1);
+  await expect(page.locator("#transaction-list")).toContainText("10,000.00");
+  await expect(page.getByRole("button", { name: "Mark unpaid: Updated loan", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Delete Updated loan", exact: true }).click();
+  await expect(page.locator("#transaction-list tr")).toHaveCount(0);
+});
+
 test("free account screen contains no pricing or upgrade controls", async ({ page, context }) => {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));

@@ -853,7 +853,7 @@ select:focus-visible {
   flex-direction: column;
   justify-content: space-between;
   padding: 1px 0 22px;
-  color: var(--subtle);
+  color: #000;
   font-size: 8px;
   text-align: right;
 }
@@ -1257,18 +1257,30 @@ tbody tr:hover {
   color: var(--blue);
 }
 
+.edit-button,
 .delete-button {
   width: 30px;
   height: 30px;
-  display: grid;
+  display: inline-grid;
   place-items: center;
-  color: var(--subtle);
+  color: var(--ink);
   background: transparent;
   border: 0;
   border-radius: 8px;
   cursor: pointer;
-  opacity: 0;
+  opacity: 1;
   transition: opacity 140ms ease, color 140ms ease, background 140ms ease;
+}
+
+.edit-button {
+  width: auto;
+  padding: 0 8px;
+  font: inherit;
+  color: var(--green);
+}
+
+.edit-button:hover {
+  background: var(--green-soft);
 }
 
 tr:hover .delete-button,
@@ -1296,6 +1308,10 @@ tr:hover .delete-button,
   border-bottom: 1px solid var(--line);
   color: var(--green);
   font-size: 13px;
+}
+
+.transaction-total[hidden] {
+  display: none;
 }
 
 .transaction-total strong {
@@ -1933,11 +1949,13 @@ tr:hover .delete-button,
   }
 
   td:last-child {
-    position: absolute;
-    top: 50%;
-    right: 7px;
-    display: block;
-    transform: translateY(-50%);
+    position: static;
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 6px;
+    transform: none;
   }
 
   .delete-button {

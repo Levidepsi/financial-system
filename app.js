@@ -233,6 +233,7 @@ const elements = {
   empty: document.querySelector("#empty-state"),
   emptyMessage: document.querySelector("#empty-message"),
   tableSummary: document.querySelector("#table-summary"),
+  transactionTotal: document.querySelector(".transaction-total"),
   transactionTotalLabel: document.querySelector("#transaction-total-label"),
   transactionTotalAmount: document.querySelector("#transaction-total-amount"),
   viewAll: document.querySelector("#view-all"),
@@ -456,7 +457,8 @@ function transactionRow(transaction) {
       <td><span class="amount ${transaction.type}">${sign}${formatCurrency.format(transaction.amount)}</span></td>
       <td>
         ${transaction.category === "Debt Repayment" ? `<button class="loan-status-button" type="button" data-loan-id="${transaction.id}" aria-pressed="${transaction.paid === true}" aria-label="${transaction.paid ? "Mark unpaid" : "Mark paid"}: ${safeName}">${transaction.paid ? "Paid · Undo" : "Mark paid"}</button>` : ""}
-        <button class="delete-button" type="button" data-delete-id="${transaction.id}" aria-label="Delete ${safeName}">
+        <button class="edit-button" type="button" data-edit-id="${transaction.id}" aria-label="Edit ${safeName}" title="Edit transaction">Edit</button>
+        <button class="delete-button" type="button" data-delete-id="${transaction.id}" aria-label="Delete ${safeName}" title="Delete transaction">
           <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6" /></svg>
         </button>
       </td>
@@ -473,6 +475,7 @@ function renderTransactions() {
     loans: "Total unpaid loans",
     "paid-loans": "Total paid loans",
   };
+  elements.transactionTotal.hidden = state.typeFilter === "all";
   elements.transactionTotalLabel.textContent = totalLabels[state.typeFilter];
   elements.transactionTotalAmount.textContent = formatCurrency.format(
     filtered.reduce((total, transaction) => total + transaction.amount, 0),
@@ -648,15 +651,29 @@ function defaultDateForSelectedMonth() {
   return dateInMonth(state.selectedMonth, Math.min(today.getDate(), daysInMonth(state.selectedMonth)));
 }
 
-function openDialog() {
+let editingTransaction = null;
+
+function openDialog(transaction = null) {
+  editingTransaction = transaction?.id ? { ...transaction } : null;
+  elements.form.reset();
+  document.querySelector("#dialog-title").textContent = editingTransaction ? "Edit transaction" : "Add transaction";
+  elements.dialog.querySelector(".section-kicker").textContent = editingTransaction ? "Update entry" : "New entry";
+  if (editingTransaction) elements.form.elements.namedItem("type").value = editingTransaction.type;
   renderCategoryOptions();
   elements.date.max = todayKey;
   elements.date.value = defaultDateForSelectedMonth();
+  if (editingTransaction) {
+    for (const field of ["name", "note", "amount", "date", "category"]) {
+      elements.form.elements.namedItem(field).value = editingTransaction[field] ?? "";
+    }
+    updateCustomCategoryField();
+  }
   elements.dialog.showModal();
   window.setTimeout(() => document.querySelector("#amount").focus(), 50);
 }
 
 function closeDialog() {
+  editingTransaction = null;
   elements.dialog.close();
   elements.form.reset();
   renderCategoryOptions();
@@ -677,6 +694,11 @@ function showToast(title, message, actionLabel = "", action = null) {
 }
 
 async function addTransaction(form) {
+  const original = editingTransaction;
+  if (original && JSON.stringify(state.transactions.find((item) => item.id === original.id)) !== JSON.stringify(original)) {
+    showToast("Transaction changed", "Close this form and reopen the transaction to edit its latest details.");
+    return;
+  }
   const data = new FormData(form);
   const type = String(data.get("type") ?? "");
   const selectedCategory = String(data.get("category") ?? "");
@@ -684,7 +706,8 @@ async function addTransaction(form) {
     ? canonicalAvailableCategoryName(data.get("customCategory"))
     : selectedCategory;
   const transaction = normalizeTransaction({
-    id: `t-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: original?.id ?? `t-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    paid: original?.paid,
     name: String(data.get("name") ?? ""),
     note: String(data.get("note") ?? ""),
     category: type === "savings" ? "Savings" : category,
@@ -698,13 +721,16 @@ async function addTransaction(form) {
     return;
   }
 
-  if (!await saveTransactions([...state.transactions, transaction])) return;
+  const transactions = original
+    ? state.transactions.map((item) => item.id === original.id ? transaction : item)
+    : [...state.transactions, transaction];
+  if (!await saveTransactions(transactions)) return;
   state.selectedMonth = transaction.date.slice(0, 7);
   state.visibleLimit = 6;
   renderCategoryOptions();
   renderAll();
   closeDialog();
-  showToast("Transaction added", `${transaction.name} was saved to ${monthLabel(state.selectedMonth)}.`);
+  showToast(original ? "Transaction updated" : "Transaction added", `${transaction.name} was saved to ${monthLabel(state.selectedMonth)}.`);
 }
 
 async function deleteTransaction(id) {
@@ -1016,6 +1042,12 @@ elements.category.addEventListener("change", (event) => {
 });
 
 elements.list.addEventListener("click", async (event) => {
+  const editButton = event.target.closest("[data-edit-id]");
+  if (editButton) {
+    const transaction = state.transactions.find((item) => item.id === editButton.dataset.editId);
+    if (transaction) openDialog(transaction);
+    return;
+  }
   const loanButton = event.target.closest("[data-loan-id]");
   if (loanButton) {
     const transaction = state.transactions.find((item) => item.id === loanButton.dataset.loanId);
