@@ -73,33 +73,9 @@ function monthLabel(monthKey) {
   return monthFormatter.format(monthDate(monthKey));
 }
 
-const currentDay = today.getDate();
-const previousMonth = offsetMonth(currentMonth, -1);
-
-const currentMonthSeed = [
-  { id: "t1", name: "Salary", note: "Monthly income", category: "Income", type: "income", amount: 82000, date: dateInMonth(currentMonth, currentDay - 1) },
-  { id: "t2", name: "Monthly savings", note: "Savings allocation", category: "Savings", type: "savings", amount: 30000, date: dateInMonth(currentMonth, currentDay - 1) },
-  { id: "t3", name: "Bhouse + Bills", note: "Housing and household bills", category: "Housing & Bills", type: "expense", amount: 10000, date: dateInMonth(currentMonth, currentDay - 2) },
-  { id: "t4", name: "Tablet", note: "Device payment", category: "Shopping", type: "expense", amount: 1754, date: dateInMonth(currentMonth, currentDay - 3) },
-  { id: "t5", name: "Pat", note: "Debt repayment", category: "Debt Repayment", type: "expense", amount: 10000, date: dateInMonth(currentMonth, currentDay - 4) },
-  { id: "t6", name: "Netflix", note: "Monthly subscription", category: "Entertainment", type: "expense", amount: 449, date: dateInMonth(currentMonth, currentDay - 5) },
-  { id: "t7", name: "Wifi nina papa", note: "Internet bill", category: "Utilities", type: "expense", amount: 790, date: dateInMonth(currentMonth, currentDay - 6) },
-  { id: "t8", name: "Kevin Utang Monthly", note: "Monthly debt repayment", category: "Debt Repayment", type: "expense", amount: 7000, date: dateInMonth(currentMonth, currentDay - 7) },
-  { id: "t9", name: "iPhone", note: "Phone payment", category: "Shopping", type: "expense", amount: 5000, date: dateInMonth(currentMonth, currentDay - 8) },
-  { id: "t10", name: "Anna", note: "Debt repayment", category: "Debt Repayment", type: "expense", amount: 1500, date: dateInMonth(currentMonth, currentDay - 9) },
-];
-
-const previousMonthSeed = [
-  { id: "p1", name: "Salary", note: "Monthly income", category: "Income", type: "income", amount: 78000, date: dateInMonth(previousMonth, 24) },
-  { id: "p2", name: "Monthly savings", note: "Savings allocation", category: "Savings", type: "savings", amount: 25000, date: dateInMonth(previousMonth, 24) },
-  { id: "p3", name: "Bhouse + Bills", note: "Housing and household bills", category: "Housing & Bills", type: "expense", amount: 11000, date: dateInMonth(previousMonth, 3) },
-  { id: "p4", name: "Tablet", note: "Device payment", category: "Shopping", type: "expense", amount: 2200, date: dateInMonth(previousMonth, 7) },
-  { id: "p5", name: "Pat", note: "Debt repayment", category: "Debt Repayment", type: "expense", amount: 12000, date: dateInMonth(previousMonth, 9) },
-  { id: "p6", name: "Netflix", note: "Monthly subscription", category: "Entertainment", type: "expense", amount: 449, date: dateInMonth(previousMonth, 11) },
-  { id: "p7", name: "Wifi nina papa", note: "Internet bill", category: "Utilities", type: "expense", amount: 790, date: dateInMonth(previousMonth, 14) },
-  { id: "p8", name: "Kevin Utang Monthly", note: "Monthly debt repayment", category: "Debt Repayment", type: "expense", amount: 7500, date: dateInMonth(previousMonth, 17) },
-  { id: "p9", name: "iPhone", note: "Phone payment", category: "Shopping", type: "expense", amount: 3600, date: dateInMonth(previousMonth, 20) },
-  { id: "p10", name: "Anna", note: "Debt repayment", category: "Debt Repayment", type: "expense", amount: 1500, date: dateInMonth(previousMonth, 22) },
+const defaultTransactions = [
+  { id: "t1", name: "Salary", note: "Monthly income", category: "Income", type: "income", amount: 20000, date: todayKey },
+  { id: "t2", name: "Expense", note: "Monthly expense", category: "Housing & Bills", type: "expense", amount: 10000, date: todayKey },
 ];
 
 const budgetDefinitions = [
@@ -178,11 +154,6 @@ function normalizeTransactionList(value) {
   return transactions;
 }
 
-function addMissingHistory(transactions) {
-  const hasPreviousMonth = transactions.some((transaction) => transaction.date.startsWith(previousMonth));
-  return hasPreviousMonth ? transactions : [...transactions, ...previousMonthSeed];
-}
-
 function loadTransactions() {
   try {
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
@@ -192,7 +163,7 @@ function loadTransactions() {
     for (const key of LEGACY_STORAGE_KEYS) {
       const legacy = normalizeTransactionList(JSON.parse(localStorage.getItem(key)));
       if (legacy) {
-        const migrated = addMissingHistory(legacy);
+        const migrated = legacy;
         localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
         return migrated;
       }
@@ -201,7 +172,7 @@ function loadTransactions() {
     // Fall back to the sample data when browser storage is unavailable or malformed.
   }
 
-  const seeded = [...currentMonthSeed, ...previousMonthSeed];
+  const seeded = [...defaultTransactions];
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded));
   } catch {
