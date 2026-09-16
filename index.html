@@ -384,6 +384,17 @@
           <label class="form-field"><span>Password</span><input id="account-password" type="password" autocomplete="current-password" required /></label>
           <button class="primary-button" id="account-submit" type="submit">Sign in</button>
           <button class="text-button" id="account-toggle" type="button">Create an account</button>
+          <button class="text-button" id="forgot-password" type="button">Forgot password?</button>
+        </form>
+        <form id="forgot-password-form" hidden>
+          <label class="form-field"><span>Email address</span><input id="recovery-email" type="email" autocomplete="email" required maxlength="254" /></label>
+          <button class="primary-button" type="submit">Send reset link</button>
+          <button class="text-button" id="back-to-sign-in" type="button">Back to sign in</button>
+        </form>
+        <form id="reset-password-form" hidden>
+          <label class="form-field"><span>New password</span><input id="new-password" type="password" autocomplete="new-password" minlength="8" required /></label>
+          <label class="form-field"><span>Confirm new password</span><input id="confirm-password" type="password" autocomplete="new-password" minlength="8" required /></label>
+          <button class="primary-button" type="submit">Save new password</button>
         </form>
         <div class="account-actions">
           <button class="secondary-button" type="button" id="refresh-account" hidden>Refresh account</button>

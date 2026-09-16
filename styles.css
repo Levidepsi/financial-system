@@ -2123,7 +2123,7 @@ tr:hover .delete-button,
 }
 .account-dialog { width: min(680px, calc(100vw - 24px)); }
 .account-dialog-content { padding: 26px; }
-.account-dialog #sign-in-form { padding: 0; margin: 18px 0; }
+.account-dialog form { display: grid; gap: 14px; padding: 0; margin: 18px 0; }
 #sign-in-form .primary-button { margin-top: 12px; }
 .plan-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 22px 0 14px; }
 .plan-card { display: flex; flex-direction: column; padding: 20px; border: 1px solid var(--line); border-radius: 16px; }
@@ -2154,6 +2154,29 @@ tr:hover .delete-button,
   .pricing-page { padding: 24px 16px; }
 }
 #profile-name { max-width: 145px; overflow: hidden; text-overflow: ellipsis; }
+/* Let native controls shrink inside grids, including Safari date inputs. */
+.form-field, .custom-category-field, .form-field input, .form-field select,
+.search-field, .select-field { min-width: 0; }
+#account-message { overflow-wrap: anywhere; }
+@media (max-width: 700px) {
+  .toolbar-actions { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .search-field, .select-field { height: 48px; }
+  .search-field svg, .select-field svg { flex-shrink: 0; }
+  .search-field input, .select-field select,
+  .form-field input, .form-field select, .month-picker input { font-size: 16px; }
+  .form-field input, .form-field select { min-height: 48px; }
+  .amount-field input { font-size: 28px; }
+  .form-field > span, .category-field > label:first-child,
+  .custom-category-field > span, .type-picker legend { font-size: 13px; }
+  .transaction-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+  .transaction-tabs button { min-height: 44px; padding: 8px 4px; font-size: 12px; }
+  .type-picker { min-width: 0; gap: 6px; }
+  .type-picker label span { gap: 4px; }
+  .transaction-dialog { max-height: calc(100dvh - 24px); }
+  .dialog-actions { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .dialog-actions button, .account-dialog button { min-height: 44px; }
+  .dialog-actions .primary-button { grid-row: 1; }
+}
 @media (max-width: 600px) {
   .account-banner { align-items: flex-start; flex-direction: column; }
   .plan-grid { grid-template-columns: 1fr; }

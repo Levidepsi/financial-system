@@ -20,7 +20,7 @@ Copy .env.example to .env.local and set APP_URL, SUPABASE_URL, SUPABASE_ANON_KEY
 
 Enable the Email provider in Supabase Authentication. The Account dialog supports email/password sign-in and a separate Create account option. Account creation runs through the server service role, marks the new address as confirmed, and returns the form to sign-in, so it does not send a confirmation email. This means account email addresses are unverified. Configure Site URL and redirect allowlist for your production origin and http://127.0.0.1:5500/ when developing locally.
 
-Existing magic-link users need a password set through a trusted Supabase recovery or administrative process before using password sign-in. Creating an account with an existing email does not reset its password or grant access to its data. Passwords are sent directly to Supabase Auth; the app continues using Supabase sessions for cloud data access.
+Users can select **Forgot password?** in the Account dialog to request a recovery email, then set and confirm a new password after opening the link. This also lets existing magic-link users set a password. Recovery uses Supabase Auth email delivery; configure its SMTP service for production and allow the exact redirect URL `https://your-domain/?recovery=1` (locally, `http://127.0.0.1:5500/?recovery=1`). Open the link in the same browser that requested it because recovery uses PKCE. Expired links can be replaced by requesting another email. Creating an account with an existing email does not reset its password or grant access to its data. Passwords are sent directly to Supabase Auth; the app continues using Supabase sessions for cloud data access.
 
 ## Accounts and data
 

@@ -4,6 +4,87 @@ const KEY = "monea-transactions-php-v3";
 const today = new Date().toISOString().slice(0, 10);
 const entry = (id, type = "expense") => ({ id, name: id, note: "", category: type === "income" ? "Income" : "Debt Repayment", type, amount: 50, date: today, paid: false });
 
+test("password recovery requests email and updates the password through a PKCE link", async ({ page, context }) => {
+  await context.route("**/api/config", route => route.fulfill({ json: {
+    configured: true, supabaseUrl: "https://example.supabase.co", supabaseAnonKey: "public",
+  } }));
+  const user = { id: "11111111-1111-4111-8111-111111111111", email: "member@example.com", aud: "authenticated" };
+  let recoveryRequest;
+  let updatedPassword;
+  let rejectUpdate = true;
+  await context.route("https://example.supabase.co/auth/v1/**", route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/recover")) {
+      recoveryRequest = route.request().postDataJSON();
+      expect(url.searchParams.get("redirect_to")).toBe("http://127.0.0.1:5510/?recovery=1");
+      return route.fulfill({ json: {} });
+    }
+    if (route.request().method() === "PUT") {
+      if (rejectUpdate) return route.fulfill({ status: 422, json: { msg: "Choose a different password" } });
+      updatedPassword = route.request().postDataJSON().password;
+      return route.fulfill({ json: user });
+    }
+    if (url.pathname.endsWith("/token")) return route.fulfill({ json: { user, access_token: "test-token", refresh_token: "refresh", expires_in: 3600, token_type: "bearer" } });
+    return route.fulfill({ json: user });
+  });
+  await context.route("**/api/account", route => route.fulfill({ json: { user, revision: 0, transactions: [], categories: [] } }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "Account", exact: true }).click();
+  await page.locator("#account-email").fill(user.email);
+  await page.locator("#forgot-password").click();
+  await expect(page.locator("#recovery-email")).toHaveValue(user.email);
+  await page.getByRole("button", { name: "Send reset link" }).click();
+  await expect(page.locator("#account-message")).toContainText("If an account exists");
+  expect(recoveryRequest.email).toBe(user.email);
+  expect(recoveryRequest.code_challenge).toBeTruthy();
+  await page.goto("/?recovery=1&code=test-recovery-code");
+  await expect(page.locator("#reset-password-form")).toBeVisible();
+  await page.locator("#new-password").fill("replacement-password");
+  await page.locator("#confirm-password").fill("different-password");
+  await page.getByRole("button", { name: "Save new password" }).click();
+  await expect(page.locator("#account-message")).toContainText("Passwords do not match");
+  expect(updatedPassword).toBeUndefined();
+  await page.locator("#confirm-password").fill("replacement-password");
+  await page.getByRole("button", { name: "Save new password" }).click();
+  await expect(page.locator("#account-message")).toContainText("Choose a different password");
+  rejectUpdate = false;
+  await page.getByRole("button", { name: "Save new password" }).click();
+  await expect(page.locator("#account-message")).toContainText("Password updated successfully");
+  expect(updatedPassword).toBe("replacement-password");
+  await expect(page.locator("#reset-password-form")).toBeHidden();
+});
+
+test("invalid recovery link offers a fresh reset email", async ({ page, context }) => {
+  await context.route("**/api/config", route => route.fulfill({ json: {
+    configured: true, supabaseUrl: "https://example.supabase.co", supabaseAnonKey: "public",
+  } }));
+  await page.goto("/?recovery=1&error=access_denied&error_description=Link+expired");
+  await expect(page.locator("#forgot-password-form")).toBeVisible();
+  await expect(page.locator("#account-message")).toContainText("expired");
+  await expect(page.locator("#reset-password-form")).toBeHidden();
+});
+
+for (const width of [320, 390, 700]) {
+  test(`mobile filters and transaction inputs fit at ${width}px`, async ({ page, context }) => {
+    await guest(context);
+    await page.setViewportSize({ width, height: 740 });
+    await page.goto("/");
+    for (const filter of ["all", "expense", "income", "savings", "loans", "paid-loans"]) {
+      await page.locator(`[data-filter="${filter}"]`).click();
+      await expect(page.locator("#transaction-search")).toHaveCSS("font-size", "16px");
+    }
+    await page.locator("[data-open-dialog]:visible").first().click();
+    await page.locator("#transaction-category").selectOption("__custom__");
+    for (const selector of ["#transaction-dialog", "#transaction-date", "#custom-category", "#amount"]) {
+      const bounds = await page.locator(selector).boundingBox();
+      expect(bounds.x).toBeGreaterThanOrEqual(0);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+    }
+    expect(await page.locator("#transaction-dialog").evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}
+
 async function guest(context, transactions = [], categories = null) {
   await context.route("**/api/config", (route) => route.fulfill({ json: { configured: false, billingConfigured: false } }));
   await context.addInitScript(({ key, transactions, categories }) => {

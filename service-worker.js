@@ -1,4 +1,4 @@
-const CACHE_NAME = "monea-offline-v9";
+const CACHE_NAME = "monea-offline-v10";
 const APP_SHELL = ["./", "./index.html", "./pricing.html", "./styles.css", "./category-policy.js", "./app.js", "./account.js", "./favicon.svg", "./manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {

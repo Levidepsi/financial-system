@@ -13,6 +13,7 @@ let refreshing = false;
 let creatingAccount = false;
 let authenticating = false;
 let loginSuccessful = false;
+let recoveryMode = null;
 
 function publish() {
   document.dispatchEvent(new CustomEvent("monea:account", { detail: { mode, account, user } }));
@@ -23,7 +24,10 @@ function render() {
   document.querySelector("#profile-name").textContent = user?.email || "Financial User";
   document.querySelector("#profile-plan").textContent = mode === "loading" ? "Loading account…"
     : "Free access";
-  document.querySelector("#sign-in-form").hidden = !config?.configured || Boolean(user);
+  document.querySelector("#sign-in-form").hidden = !config?.configured || Boolean(user) || Boolean(recoveryMode);
+  document.querySelector("#forgot-password-form").hidden = !config?.configured || recoveryMode !== "request";
+  document.querySelector("#reset-password-form").hidden = !config?.configured || recoveryMode !== "update" || !user;
+  document.querySelector("#account-title").textContent = recoveryMode === "update" ? "Set new password" : recoveryMode === "request" ? "Reset password" : "Account";
   document.querySelector("#sign-out").hidden = !user;
   document.querySelector("#refresh-account").hidden = !user;
 }
@@ -59,10 +63,10 @@ async function refresh() {
     if (expected !== generation) return;
     account = next;
     mode = "account";
-    message.textContent = `${loginSuccessful ? "Login successful. " : ""}${user.email}. All features are free. Your financial data is synced to your account.`;
+    if (!recoveryMode) message.textContent = `${loginSuccessful ? "Login successful. " : ""}${user.email}. All features are free. Your financial data is synced to your account.`;
     publish();
   } catch (error) {
-    if (expected === generation) message.textContent = error.message;
+    if (expected === generation && !recoveryMode) message.textContent = error.message;
     throw error;
   } finally {
     if (expected === generation) refreshing = false;
@@ -74,6 +78,7 @@ function acceptSession(session) {
   if (nextUser?.id === user?.id && mode !== "loading") return;
   generation += 1;
   user = nextUser;
+  if (!user && recoveryMode === "update") recoveryMode = null;
   loginSuccessful = false;
   account = null;
   mode = user ? "loading" : "guest";
@@ -136,6 +141,59 @@ function setCreatingAccount(value, statusMessage) {
 document.querySelector("#account-toggle").addEventListener("click", () => {
   setCreatingAccount(!creatingAccount);
 });
+
+document.querySelector("#forgot-password").addEventListener("click", () => {
+  recoveryMode = "request";
+  document.querySelector("#recovery-email").value = document.querySelector("#account-email").value;
+  document.querySelector("#account-password").value = "";
+  message.textContent = "Enter your email to receive a password reset link. Open it in this browser.";
+  render();
+  document.querySelector("#recovery-email").focus();
+});
+document.querySelector("#back-to-sign-in").addEventListener("click", () => {
+  recoveryMode = null;
+  setCreatingAccount(false);
+  render();
+  document.querySelector("#account-email").focus();
+});
+
+for (const id of ["forgot-password-form", "reset-password-form"]) {
+  document.getElementById(id).addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (authenticating) return;
+    const updating = id === "reset-password-form";
+    const password = document.querySelector("#new-password");
+    if (updating && password.value !== document.querySelector("#confirm-password").value) {
+      message.textContent = "Passwords do not match. Please try again.";
+      document.querySelector("#confirm-password").focus();
+      return;
+    }
+    authenticating = true;
+    const form = event.currentTarget;
+    const controls = [...form.querySelectorAll("input, button")];
+    controls.forEach(control => { control.disabled = true; });
+    message.textContent = updating ? "Saving your new password…" : "Sending reset link…";
+    try {
+      const { error } = updating
+        ? await client.auth.updateUser({ password: password.value })
+        : await client.auth.resetPasswordForEmail(document.querySelector("#recovery-email").value.trim(), {
+          redirectTo: `${location.origin}${location.pathname}?recovery=1`,
+        });
+      if (error) throw error;
+      if (updating) {
+        recoveryMode = null;
+        form.reset();
+        render();
+      }
+      message.textContent = updating ? "Password updated successfully. You can now sign in with your new password."
+        : "If an account exists for that email, a reset link has been sent. Check your inbox and spam folder, and open the link in this browser.";
+    } catch (error) { message.textContent = error.message; }
+    finally {
+      authenticating = false;
+      controls.forEach(control => { control.disabled = false; });
+    }
+  });
+}
 
 document.querySelector("#sign-in-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -201,10 +259,29 @@ async function initialize() {
     client = createClient(config.supabaseUrl, config.supabaseAnonKey, {
       auth: { flowType: "pkce", detectSessionInUrl: true, persistSession: true, autoRefreshToken: true },
     });
-    client.auth.onAuthStateChange((_event, session) => { acceptSession(session); });
+    client.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY") recoveryMode = "update";
+      acceptSession(session);
+      if (event === "PASSWORD_RECOVERY") {
+        message.textContent = "Choose a new password with at least 8 characters.";
+        render();
+        if (!dialog.open) dialog.showModal();
+        document.querySelector("#new-password").focus();
+      }
+    });
     const { error } = await client.auth.getSession();
-    if (error) throw error;
     const url = new URL(location.href);
+    if (url.searchParams.has("recovery")) {
+      url.searchParams.delete("recovery");
+      for (const key of ["code", "error", "error_code", "error_description"]) url.searchParams.delete(key);
+      url.hash = "";
+      history.replaceState(null, "", url);
+      if (recoveryMode !== "update") {
+        recoveryMode = "request";
+        message.textContent = "This reset link is expired or could not be verified. Request a new link and open it in the same browser.";
+      }
+      if (!dialog.open) dialog.showModal();
+    } else if (error) throw error;
     if (url.searchParams.has("billing") || url.searchParams.has("plan")) {
       url.searchParams.delete("billing");
       url.searchParams.delete("plan");
