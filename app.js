@@ -370,6 +370,19 @@ function balanceFromTotals(totals) {
   return totals.income - totals.savings - totals.expense;
 }
 
+function getMonthlyTotals(monthKey = state.selectedMonth) {
+  const totals = getTotals(transactionsForMonth(monthKey));
+  let incomeSourceMonth = null;
+  if (totals.income === 0) {
+    incomeSourceMonth = state.transactions
+      .filter((transaction) => transaction.type === "income" && transaction.date.slice(0, 7) < monthKey)
+      .map((transaction) => transaction.date.slice(0, 7))
+      .sort().at(-1) ?? null;
+    if (incomeSourceMonth) totals.income = getTotals(transactionsForMonth(incomeSourceMonth)).income;
+  }
+  return { ...totals, incomeSourceMonth };
+}
+
 function percentChange(current, previous) {
   if (previous === 0) return current === 0 ? 0 : null;
   return ((current - previous) / Math.abs(previous)) * 100;
@@ -390,8 +403,8 @@ function renderPeriod() {
 }
 
 function renderSummary() {
-  const totals = getTotals();
-  const previousTotals = getTotals(transactionsForMonth(offsetMonth(state.selectedMonth, -1)));
+  const totals = getMonthlyTotals();
+  const previousTotals = getMonthlyTotals(offsetMonth(state.selectedMonth, -1));
   const availableIncome = totals.income - totals.savings;
   const balance = balanceFromTotals(totals);
   const previousBalance = balanceFromTotals(previousTotals);
@@ -405,6 +418,9 @@ function renderSummary() {
   elements.formula.textContent = state.balanceVisible
     ? `${formatCurrency.format(totals.income)} income − ${formatCurrency.format(totals.savings)} savings`
     : "Income minus savings and expenses";
+  if (state.balanceVisible && totals.incomeSourceMonth) {
+    elements.formula.textContent += ` · Using income from ${monthLabel(totals.incomeSourceMonth)} until income is recorded this month`;
+  }
   elements.count.textContent = transactionsForMonth().length;
 
   elements.balanceTrend.classList.remove("negative", "neutral");
@@ -497,7 +513,7 @@ function renderTransactions() {
 
 function renderBudgets() {
   const expenses = transactionsForMonth().filter((transaction) => transaction.type === "expense");
-  const totals = getTotals();
+  const totals = getMonthlyTotals();
   const budgets = budgetDefinitions.map((budget) => ({
     ...budget,
     spent: expenses
@@ -969,13 +985,14 @@ async function importCsv(event) {
 
 function exportSelectedMonth() {
   const transactions = transactionsForMonth().sort((a, b) => new Date(a.date) - new Date(b.date));
-  const totals = getTotals(transactions);
+  const totals = getMonthlyTotals();
   const rows = [
     ["Date", "Type", "Name", "Category", "Note", "Amount (PHP)", "Loan paid"],
     ...transactions.map((transaction) => [transaction.date, transaction.type, transaction.name, transaction.category, transaction.note || "", transaction.amount, transaction.paid === true]),
     [],
     ["Monthly summary", "Amount (PHP)"],
     ["Gross income", totals.income],
+    ...(totals.incomeSourceMonth ? [["Income retained from", monthLabel(totals.incomeSourceMonth)]] : []),
     ["Savings", totals.savings],
     ["Expenses", totals.expense],
     ["Remaining balance", balanceFromTotals(totals)],
@@ -1076,7 +1093,7 @@ document.querySelector("#toggle-balance").addEventListener("click", (event) => {
 });
 
 document.querySelector("#manage-budgets").addEventListener("click", () => {
-  const remaining = balanceFromTotals(getTotals());
+  const remaining = balanceFromTotals(getMonthlyTotals());
   const message = remaining >= 0
     ? `${shortCurrency.format(remaining)} remains in ${monthLabel(state.selectedMonth)}.`
     : `${shortCurrency.format(Math.abs(remaining))} is over your available funds in ${monthLabel(state.selectedMonth)}.`;
