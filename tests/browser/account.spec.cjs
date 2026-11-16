@@ -195,6 +195,37 @@ test("transaction form prevents duplicate submissions while a save is pending", 
   await expect(page.getByRole("button", { name: "Save transaction", exact: true })).toBeEnabled();
 });
 
+test("mobile entry preserves failed saves and retries without duplicates", async ({ page, context }) => {
+  const account = await signedIn(context);
+  let fail = true;
+  await context.route("**/api/transactions", route => fail
+    ? route.fulfill({ status: 503, json: { error: "Connection interrupted." } })
+    : route.fallback());
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.waitForFunction(() => window.MoneaAccount?.mode === "account");
+  await page.locator(".mobile-quick-add").click();
+  await page.locator('input[name="type"][value="income"]').check();
+  await page.locator("#amount").fill("299");
+  await page.locator('#transaction-form input[name="name"]').fill("Test income");
+  await page.getByRole("button", { name: "Save transaction", exact: true }).click();
+  await expect(page.locator("#transaction-save-error")).toContainText("Connection interrupted");
+  await expect(page.locator("#amount")).toHaveValue("299");
+  await expect(page.locator('#transaction-form input[name="name"]')).toHaveValue("Test income");
+  await expect(page.locator("#perfi-sync-status")).toContainText("Couldn’t save");
+  await page.evaluate(() => window.MoneaAccount.refresh());
+  await expect(page.locator("#perfi-sync-status")).toContainText("Couldn’t save");
+  fail = false;
+  await page.getByRole("button", { name: "Retry save", exact: true }).click();
+  await expect(page.locator("#transaction-dialog")).toBeHidden();
+  await expect(page.locator("#perfi-sync-status")).toHaveText("Saved to account");
+  expect(account.transactions).toHaveLength(1);
+  const duplicate = page.locator("[data-duplicate-id]").first();
+  await expect(duplicate).toHaveCSS("min-height", "44px");
+  await duplicate.click();
+  await expect(page.locator("#amount")).toHaveValue("299");
+});
+
 test("transactions can be edited and deleted with visible controls", async ({ page, context }) => {
   await guest(context, [{ ...entry("Loan"), paid: true }]);
   await page.goto("/");
@@ -336,7 +367,7 @@ test("accounts can create categories beyond old limits without any billing inter
   await expect(page.locator("#toast")).toContainText("Transaction added");
   expect(account.categories).toHaveLength(8);
   await page.getByRole("button", { name: "Account", exact: true }).click();
-  await expect(page.locator("#profile-plan")).toHaveText("Free access");
+  await expect(page.locator("#profile-plan")).toHaveText("Lifetime access");
   await expect(page.locator(".billing-summary, [data-subscribe]")).toHaveCount(0);
 });
 
@@ -362,11 +393,11 @@ test("guests can download the full-history report for free", async ({ page, cont
   await expect(page.locator("#account-dialog")).toBeHidden();
 });
 
-test("old pricing URL explains free access without paid plans", async ({ page }) => {
+test("pricing explains a one-time purchase with lifetime access", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/pricing.html");
-  await expect(page.getByRole("heading", { name: "Your finances. All features. Free." })).toBeVisible();
-  await expect(page.getByText("No subscription or payment required.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pay once. Use Perfi for life." })).toBeVisible();
+  await expect(page.getByText(/No recurring subscription or additional app access fees/)).toBeVisible();
   await expect(page.locator('[href*="plan="], .plan-price')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

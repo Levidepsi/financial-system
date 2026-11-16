@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Monea is a simple, elegant personal expense tracker." />
+    <meta name="description" content="Perfi brings your income, expenses, and savings together." />
     <meta name="theme-color" content="#f7f7f2" />
     <title>Perfi</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
@@ -18,7 +18,7 @@
 
     <div class="app-shell">
       <aside class="sidebar" aria-label="Primary navigation">
-        <a class="brand" href="#" aria-label="Monea dashboard">
+        <a class="brand" href="#" aria-label="Perfi dashboard">
           <span class="brand-mark" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M5 17.5V11m7 6.5v-11m7 11V3.5" /></svg>
           </span>
@@ -51,7 +51,7 @@
             <span class="avatar">FU</span>
             <span class="profile-copy">
               <strong id="profile-name">Financial User</strong>
-              <small id="profile-plan">Local demo</small>
+              <small id="profile-plan">Personal finance</small>
             </span>
             <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></svg>
           </button>
@@ -63,7 +63,7 @@
           <div>
             <p class="eyebrow" id="today-label">Friday, August 14</p>
             <h1 id="greeting">Good morning, Welcome to Perfi.</h1>
-            <p>Here’s  your money is looking today.</p>
+            <p>Here’s how your money is looking today.</p>
           </div>
           <div class="topbar-actions">
             <button class="icon-button" type="button" aria-label="Notifications">
@@ -365,6 +365,7 @@
           </label>
         </div>
 
+        <p id="transaction-save-error" class="transaction-save-error" role="alert" hidden></p>
         <div class="dialog-actions">
           <button class="secondary-button" type="button" data-close-dialog>Cancel</button>
           <button class="primary-button" type="submit">Save transaction</button>
@@ -404,6 +405,7 @@
       </div>
     </dialog>
 
+    <button class="primary-button mobile-quick-add" type="button" data-open-dialog aria-label="Add transaction">+ Add transaction</button>
     <div class="toast" id="toast" role="status" aria-live="polite">
       <span class="toast-icon">
         <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" /></svg>

@@ -86,7 +86,7 @@ function createHandler({ env = process.env, db: providedDb, fetch: sendRequest =
       const url = new URL(req.url, "http://localhost");
       const route = url.searchParams.get("route") || url.pathname.replace(/^\/api\/?/, "");
       if (route.startsWith("billing/") || route.startsWith("stripe/")) {
-        throw new HttpError(410, "Perfi is free. Subscriptions and billing are disabled.");
+        throw new HttpError(410, "Perfi uses a one-time purchase through Raket PH. In-app subscriptions and billing are disabled.");
       }
       if (route === "config" && req.method === "GET") {
         res.end(JSON.stringify({ configured: authConfigured(), billingConfigured: billingConfigured(),

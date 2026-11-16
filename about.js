@@ -18,9 +18,13 @@ if (videoUrl) {
   video.hidden = false;
   document.querySelector("#video-placeholder").hidden = true;
 }
-if (productUrl) link.href = productUrl;
+if (productUrl) {
+  link.href = productUrl;
+  link.hidden = false;
+  document.querySelector("#product-pending").hidden = true;
+}
 video.addEventListener("ended", () => {
-  if (videoUrl && productUrl) product.hidden = false;
+  if (videoUrl) product.hidden = false;
 });
 video.addEventListener("error", () => {
   document.querySelector("#video-error").hidden = false;

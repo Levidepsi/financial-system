@@ -24,7 +24,7 @@ function publish() {
 function render() {
   document.querySelector("#profile-name").textContent = user?.email || "Financial User";
   document.querySelector("#profile-plan").textContent = mode === "loading" ? "Loading account…"
-    : "Free access";
+    : "Lifetime access";
   document.querySelector("#sign-in-form").hidden = !config?.configured || Boolean(user) || Boolean(recoveryMode);
   document.querySelector("#forgot-password-form").hidden = !config?.configured || recoveryMode !== "request";
   document.querySelector("#reset-password-form").hidden = !config?.configured || recoveryMode !== "update" || !user;
@@ -65,7 +65,7 @@ async function refresh() {
     if (expected !== generation || expectedMutation !== mutationVersion) return;
     account = next;
     mode = "account";
-    if (!recoveryMode) message.textContent = `${loginSuccessful ? "Login successful. " : ""}${user.email}. All features are free. Your financial data is synced to your account.`;
+    if (!recoveryMode) message.textContent = `${loginSuccessful ? "Login successful. " : ""}${user.email}. One-time purchase. Lifetime access. No subscription. Your financial data is synced to your account.`;
     publish();
   } catch (error) {
     if (expected === generation && expectedMutation === mutationVersion && !recoveryMode) message.textContent = error.message;
@@ -86,7 +86,7 @@ function acceptSession(session) {
   mode = user ? "loading" : "guest";
   saving = false;
   refreshing = false;
-  message.textContent = user ? "Loading your account…" : "Sign in with your email and password to sync your data across devices. All features are free.";
+  message.textContent = user ? "Loading your account…" : "Sign in with your email and password to sync your data across devices. One-time purchase. Lifetime access. No subscription.";
   publish();
   // Keep asynchronous auth calls outside Supabase's auth-state lock.
   if (user) setTimeout(() => { void refresh().catch(() => {}); }, 0);

@@ -1,5 +1,5 @@
 const { build } = require("esbuild");
-const { mkdir, copyFile } = require("node:fs/promises");
+const { mkdir, copyFile, cp } = require("node:fs/promises");
 const path = require("node:path");
 
 async function buildApp() {
@@ -7,6 +7,7 @@ async function buildApp() {
   const output = path.join(root, "dist");
   await mkdir(output, { recursive: true });
   await Promise.all([
+    cp(path.join(root, "public"), path.join(output, "public"), { recursive: true }),
     ...["index.html", "about.html", "about.css", "about.js", "pricing.html", "category-policy.js", "app.js", "perfi-extras.js", "styles.css", "favicon.svg", "manifest.webmanifest", "service-worker.js"]
       .map((file) => copyFile(path.join(root, file), path.join(output, file))),
     build({

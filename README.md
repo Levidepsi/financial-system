@@ -1,6 +1,10 @@
 ﻿# Perfi
 
-Perfi is free for everyone. Income categories, expense categories, transactions, dashboards, monthly reports, and full-history CSV exports have no subscription limits. No payment is required.
+Perfi is sold through Raket PH for a one-time price of ₱299 with lifetime app access. After purchase, there are no recurring subscriptions or additional app access fees. Income categories, expense categories, transactions, dashboards, monthly reports, and full-history CSV exports have no subscription limits.
+
+Purchase verification is not implemented in this app; this describes the external sales offer, not an access-control mechanism. Existing local-storage keys and database identifiers retain their legacy names to preserve saved data.
+
+The unlisted About page uses `public/lv_0_20261116113733.mp4`. Add the Raket PH product URL to `data-product-url` in `about.html` when available. The lifetime-access offer appears when playback ends; the purchase button stays hidden until a URL is configured. The build copies `public` into `dist/public`.
 
 Email sign-in, sign-out, account ownership, and cross-device data syncing remain enabled. Guests can use all features locally, including full-history export. Sign in to save financial data to an account.
 
@@ -8,7 +12,7 @@ Email sign-in, sign-out, account ownership, and cross-device data syncing remain
 
 Apply supabase/migrations/003_free_access.sql in the Supabase SQL Editor before deploying this version. It removes database category quotas without deleting accounts, categories, transactions, or historical billing records. It retains validation, ownership protections, and revision checks against concurrent edits.
 
-For an existing installation, apply only migrations that have not already been applied. Migration 003 requires 001_accounts_and_billing.sql and 002_category_limits.sql. For a new project, run 001, 002, and then 003 in order. The earlier migrations describe the historical paid system; 003 establishes the current free behavior.
+For an existing installation, apply only migrations that have not already been applied. Migration 003 requires 001_accounts_and_billing.sql and 002_category_limits.sql. For a new project, run 001, 002, and then 003 in order. The earlier migrations describe the historical subscription system; 003 removes in-app subscription restrictions.
 
 The app cannot run this migration through a Supabase service-role API key alone. Use the SQL Editor or a direct database connection.
 
@@ -28,7 +32,7 @@ After a successful password login, the Account dialog displays “Login successf
 
 The notification endpoint verifies the signed-in user, uses their account email, and accepts only logins from the past five minutes. Resend idempotency keys prevent repeat emails for the same login. Reloading the page, refreshing a token, and creating an account do not trigger notifications.
 
-The API verifies the session and derives the user ID from it. Browser roles cannot directly edit account tables or privileged database functions. Making features free does not make financial data public.
+The API verifies the session and derives the user ID from it. Browser roles cannot directly edit account tables or privileged database functions. Financial data remains private to its account owner.
 
 New accounts start empty. Existing local data stays on the device; export a monthly CSV and import it after signing in to migrate it. Signing out clears cloud data from the page. Cloud data is never stored in the guest ledger or service-worker cache.
 
@@ -38,7 +42,7 @@ Revision checks prevent stale sessions from overwriting newer changes. Other tab
 
 ## Billing disabled
 
-Checkout, billing-portal, and webhook routes return HTTP 410, even if old Stripe credentials remain configured. The interface has no prices, upgrades, billing forms, or locked reports. The old pricing.html URL now explains that all features are free.
+Checkout, billing-portal, and webhook routes return HTTP 410, even if old Stripe credentials remain configured. There are no in-app subscriptions or locked reports. The About and pricing pages explain the one-time Raket PH purchase and lifetime access.
 
 Historical billing records are retained for reference. Disabling app billing endpoints does not cancel any subscriptions that might already exist in an external Stripe account; any such subscriptions must be canceled there separately.
 

@@ -87,7 +87,7 @@ test("old checkout, portal, and webhook routes are disabled even with Stripe cre
   for (const path of ["billing/checkout", "billing/portal", "stripe/webhook"]) {
     const response = await invoke(handler, path, { method: "POST", body: { plan: "premium" } });
     assert.equal(response.status, 410);
-    assert.match(response.body.error, /Perfi is free/);
+    assert.match(response.body.error, /one-time purchase through Raket PH/);
   }
 });
 test("raw request reader never invokes Vercel's JSON body getter", async () => {

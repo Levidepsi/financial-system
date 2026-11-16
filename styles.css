@@ -2187,6 +2187,17 @@ tr:hover .delete-button,
 
 /* Perfi productivity additions */
 .perfi-sync-status{font-size:12px;color:#1c5c45;font-weight:700;margin-left:auto;margin-right:12px}
+.perfi-sync-status[data-state="failed"] { color: #a33d30; }
+.perfi-sync-status[data-state="saving"] { color: #735519; }
+.transaction-save-error { margin: 16px 0; padding: 12px; border: 1px solid #e9b4ac; border-radius: 10px; color: #8b3026; background: #fff4f1; font-size: 14px; line-height: 1.6; }
+.mobile-quick-add { display: none; }
+@media (max-width: 700px) {
+  .mobile-quick-add { display: inline-flex; position: fixed; right: 18px; bottom: calc(92px + env(safe-area-inset-bottom)); z-index: 9; min-height: 48px; box-shadow: var(--shadow); }
+  main { padding-bottom: 170px; }
+  .toast { bottom: calc(152px + env(safe-area-inset-bottom)); }
+  .edit-button, .delete-button, .loan-status-button { min-width: 44px; min-height: 44px; }
+  #transaction-form button { min-height: 44px; }
+}
 .perfi-budget-remaining{display:block;margin:5px 0 8px 18px;color:#68786e;font-size:11px}
 .perfi-tools{max-width:1400px;margin:30px auto;padding:28px;border:1px solid #e2e8df;border-radius:22px;background:#fff;box-shadow:0 12px 30px #163f2a0b}
 .perfi-tools h2{font-size:23px;margin:0 0 6px}.perfi-tools p{color:#64766d;margin:0 0 16px}

@@ -5,9 +5,10 @@ function readExtras(key, fallback) {
 function writeExtras(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch { return false; }
 }
+let saveStatus = "idle";
 function updateSyncIndicator(label) {
   const node = document.querySelector("#perfi-sync-status");
-  if (node) node.textContent = label;
+  if (node) { node.textContent = label; node.dataset.state = saveStatus; }
 }
 
 const STORAGE_KEY = "monea-transactions-php-v3";
@@ -287,12 +288,14 @@ async function saveTransactions(transactions, extraCategories = []) {
   const account = window.MoneaAccount;
   const identity = account?.identity;
   const expectedSnapshot = localSnapshot;
-  updateSyncIndicator("Syncing…");
+  saveStatus = "saving";
+  updateSyncIndicator("Saving…");
   try {
     if (!account || account.mode === "loading") throw new Error("Wait for account settings to finish loading.");
     const categories = CategoryPolicy.merge(state.categories, [...extraCategories, ...CategoryPolicy.fromTransactions(transactions)]);
     if (account.mode === "account") {
       await account.save(transactions);
+      saveStatus = "saved";
       updateSyncIndicator("Saved to account");
       return true;
     }
@@ -314,10 +317,17 @@ async function saveTransactions(transactions, extraCategories = []) {
     };
     if (navigator.locks) await navigator.locks.request("monea-local-transactions", persist);
     else persist();
+    saveStatus = "saved";
     updateSyncIndicator("Saved on this device");
     return true;
   } catch (error) {
-    updateSyncIndicator("Save failed");
+    saveStatus = "failed";
+    updateSyncIndicator("Couldn’t save");
+    if (elements.dialog.open) {
+      const errorNode = document.querySelector("#transaction-save-error");
+      errorNode.textContent = `${error.message || "Saving is unavailable."} Your entry is still here. Select Retry save when you're ready.`;
+      errorNode.hidden = false;
+    }
     showToast("Changes not saved", error.message || "Storage is unavailable. Please try again.");
     return false;
   }
@@ -677,7 +687,7 @@ function renderAccountUsage() {
   }
   const income = state.categories.filter((item) => item.type === "income").length;
   const expense = state.categories.filter((item) => item.type === "expense").length;
-  status.textContent = account.mode === "guest" ? "Free · Saved on this device" : "Free · Synced to your account";
+  status.textContent = account.mode === "guest" ? "Saved on this device" : "Synced to your account";
   usage.textContent = `${income} income categories · ${expense} expense categories · Unlimited categories and transactions.${account.mode === "guest" ? " Sign in to sync across devices." : ""}`;
 }
 
@@ -687,8 +697,12 @@ function defaultDateForSelectedMonth() {
 }
 
 let editingTransaction = null;
+let newTransactionId = null;
 
 function openDialog(transaction = null, duplicate = false) {
+  newTransactionId = null;
+  document.querySelector("#transaction-save-error").hidden = true;
+  elements.form.querySelector('button[type="submit"]').textContent = "Save transaction";
   editingTransaction = transaction?.id && !duplicate ? { ...transaction } : null;
   elements.form.reset();
   document.querySelector("#dialog-title").textContent = editingTransaction ? "Edit transaction" : "Add transaction";
@@ -741,7 +755,7 @@ async function addTransaction(form) {
     ? canonicalAvailableCategoryName(data.get("customCategory"))
     : selectedCategory;
   const transaction = normalizeTransaction({
-    id: original?.id ?? `t-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: original?.id ?? (newTransactionId ||= `t-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
     paid: original?.paid,
     name: String(data.get("name") ?? ""),
     note: String(data.get("note") ?? ""),
@@ -756,10 +770,19 @@ async function addTransaction(form) {
     return;
   }
 
+  const alreadySaved = !original && state.transactions.find((item) => item.id === transaction.id);
+  if (alreadySaved && JSON.stringify(alreadySaved) !== JSON.stringify(transaction)) {
+    showToast("Transaction already saved", "This entry was saved with different details. Close this form and edit the saved entry.");
+    return;
+  }
   const transactions = original
     ? state.transactions.map((item) => item.id === original.id ? transaction : item)
     : [...state.transactions, transaction];
-  if (!await saveTransactions(transactions)) return;
+  if (!alreadySaved && !await saveTransactions(transactions)) return;
+  if (alreadySaved) {
+    saveStatus = "saved";
+    updateSyncIndicator(window.MoneaAccount?.mode === "account" ? "Saved to account" : "Saved on this device");
+  }
   state.selectedMonth = transaction.date.slice(0, 7);
   state.visibleLimit = 6;
   renderCategoryOptions();
@@ -810,7 +833,7 @@ function backupData() {
     exportedAt: new Date().toISOString(),
     transactions: state.transactions,
   };
-  downloadFile(JSON.stringify(backup, null, 2), "application/json;charset=utf-8", `monea-backup-${todayKey}.json`);
+  downloadFile(JSON.stringify(backup, null, 2), "application/json;charset=utf-8", `perfi-backup-${todayKey}.json`);
   showToast("Backup downloaded", `${state.transactions.length} transactions were saved to a JSON file.`);
 }
 
@@ -827,7 +850,7 @@ async function restoreData(event) {
       ? backup
       : backup && typeof backup === "object" ? backup.transactions : null;
     const transactions = normalizeTransactionList(backupTransactions);
-    if (!transactions) throw new Error("This file is not a valid Monea backup.");
+    if (!transactions) throw new Error("This file is not a valid Perfi backup.");
 
     const confirmed = window.confirm(`Replace your current ${state.transactions.length} transactions with ${transactions.length} from this backup?`);
     if (!confirmed) return;
@@ -1023,7 +1046,7 @@ function exportSelectedMonth() {
     ["Remaining balance", balanceFromTotals(totals)],
   ];
   const csv = rows.map((row) => row.map(csvCell).join(",")).join("\n");
-  downloadFile(`\uFEFF${csv}`, "text/csv;charset=utf-8", `monea-${state.selectedMonth}.csv`);
+  downloadFile(`\uFEFF${csv}`, "text/csv;charset=utf-8", `perfi-${state.selectedMonth}.csv`);
   showToast("Monthly report exported", `${monthLabel(state.selectedMonth)} was downloaded as a CSV file.`);
 }
 
@@ -1045,7 +1068,8 @@ elements.form.addEventListener("submit", async (event) => {
   if (transactionSubmitting) return;
   const form = event.currentTarget;
   const button = form.querySelector('button[type="submit"]');
-  const label = button.textContent;
+  const errorNode = document.querySelector("#transaction-save-error");
+  errorNode.hidden = true;
   transactionSubmitting = true;
   button.disabled = true;
   button.textContent = "Saving…";
@@ -1055,7 +1079,7 @@ elements.form.addEventListener("submit", async (event) => {
   } finally {
     transactionSubmitting = false;
     button.disabled = false;
-    button.textContent = label;
+    button.textContent = errorNode.hidden ? "Save transaction" : "Retry save";
     form.removeAttribute("aria-busy");
   }
 });
@@ -1225,6 +1249,7 @@ document.addEventListener("monea:account", (event) => {
   const { mode, account, user } = event.detail;
   const nextIdentity = user?.id || "guest";
   if (displayedIdentity !== nextIdentity) {
+    saveStatus = "idle";
     displayedIdentity = nextIdentity;
     toastAction = null;
     closeDialog();
@@ -1240,7 +1265,9 @@ document.addEventListener("monea:account", (event) => {
   }
   renderCategoryOptions();
   state.categoryFilter = elements.category.value;
-  updateSyncIndicator(mode === "loading" ? "Syncing…" : mode === "account" ? "Saved to account" : "Saved on this device");
+  if (saveStatus !== "saving" && saveStatus !== "failed") {
+    updateSyncIndicator(mode === "loading" ? "Loading account…" : mode === "account" ? "Saved to account" : "Saved on this device");
+  }
   renderAll();
   if (mode === "account") offerGuestMigration();
 });

@@ -17,6 +17,14 @@
 .about-product h2 { margin: 10px 0; }
 .about-product p { line-height: 1.6; }
 .about-product a { text-decoration: none; margin-top: 8px; }
+.about-offer { max-width: 440px; margin: 22px auto 16px; padding: 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+.about-offer p { margin: 10px 0; }
+.offer-regular { color: #526158; font-size: 14px; }
+.offer-price { color: var(--green-dark); }
+.offer-price strong { display: block; font-size: clamp(36px, 8vw, 48px); line-height: 1.2; }
+.offer-savings { color: var(--green-dark); font-weight: 700; }
+.offer-code { padding: 12px; background: var(--green-soft); border-radius: 8px; overflow-wrap: anywhere; }
+.offer-code strong { letter-spacing: .08em; user-select: all; }
 .about-footer { margin-top: 28px; text-align: center; color: var(--muted); font-size: 13px; }
 .about-page [hidden] { display: none !important; }
 @media (max-width: 480px) { .about-header { padding: 20px 16px; } .about-page { padding: 20px 16px 32px; } .about-header nav a { font-size: 12px; } .about-video-heading, .about-product { padding: 24px 20px; } }

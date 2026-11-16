@@ -1,6 +1,6 @@
 {
-  "name": "Monea Expense Tracker",
-  "short_name": "Monea",
+  "name": "Perfi Expense Tracker",
+  "short_name": "Perfi",
   "description": "A private, offline-ready personal expense tracker.",
   "start_url": "./",
   "scope": "./",
