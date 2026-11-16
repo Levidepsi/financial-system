@@ -2114,6 +2114,8 @@ tr:hover .delete-button,
   border: 1px solid var(--line);
   border-radius: 16px;
   background: white;
+      max-width: 1440px;
+      margin-inline: auto;
 }
 .account-banner p, .plan-note, #account-message {
   margin: 6px 0 0;
@@ -2182,3 +2184,13 @@ tr:hover .delete-button,
   .plan-grid { grid-template-columns: 1fr; }
   .account-dialog-content { padding: 20px; }
 }
+
+/* Perfi productivity additions */
+.perfi-sync-status{font-size:12px;color:#1c5c45;font-weight:700;margin-left:auto;margin-right:12px}
+.perfi-budget-remaining{display:block;margin:5px 0 8px 18px;color:#68786e;font-size:11px}
+.perfi-tools{max-width:1400px;margin:30px auto;padding:28px;border:1px solid #e2e8df;border-radius:22px;background:#fff;box-shadow:0 12px 30px #163f2a0b}
+.perfi-tools h2{font-size:23px;margin:0 0 6px}.perfi-tools p{color:#64766d;margin:0 0 16px}
+.perfi-tools-actions{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px}
+.perfi-schedule-list{display:grid;gap:10px}.perfi-schedule-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:13px;border:1px solid #e5e9e5;border-radius:12px}
+.perfi-schedule-row strong{display:block}.perfi-schedule-row small{display:block;color:#63756c;margin-top:4px}.perfi-schedule-row button{border:1px solid #b6c9bd;border-radius:8px;background:#fff;padding:8px 12px;cursor:pointer;margin:3px}
+@media(max-width:700px){.perfi-tools{margin:18px;padding:18px}.perfi-sync-status{display:block;margin:6px 0}}

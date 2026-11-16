@@ -79,6 +79,7 @@
 
         <section class="account-banner" aria-label="Account">
           <div><strong id="account-status">Loading account…</strong><p id="account-usage">Your existing browser data stays on this device.</p></div>
+          <span id="perfi-sync-status" class="perfi-sync-status" role="status" aria-live="polite">Checking save status…</span>
           <button class="secondary-button" type="button" data-open-account>Account</button>
         </section>
 
@@ -410,5 +411,11 @@
       <div><strong>Transaction added</strong><p>Your balance has been updated.</p></div>
       <button class="toast-action" id="toast-action" type="button" hidden>Undo</button>
     </div>
-  </body>
+  <!-- <section class="perfi-tools" aria-label="Productivity tools">
+  <div class="perfi-tools-head"><h2>Plan ahead</h2><p>Manage recurring entries and upcoming payments. These schedules are saved on this device.</p></div>
+  <div class="perfi-tools-actions"><button id="perfi-new-schedule" class="primary-button" type="button">+ Schedule recurring entry</button><button id="perfi-setup" class="secondary-button" type="button">First-use guide</button></div>
+  <div id="perfi-schedule-list" class="perfi-schedule-list"></div>
+</section> -->
+<script src="perfi-extras.js" defer></script>
+</body>
 </html>

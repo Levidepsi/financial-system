@@ -1,3 +1,15 @@
+// Optional productivity settings are stored per browser and do not sync to the account.
+function readExtras(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
+}
+function writeExtras(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch { return false; }
+}
+function updateSyncIndicator(label) {
+  const node = document.querySelector("#perfi-sync-status");
+  if (node) node.textContent = label;
+}
+
 const STORAGE_KEY = "monea-transactions-php-v3";
 const LEGACY_STORAGE_KEYS = ["monea-transactions-php-v2"];
 const CUSTOM_CATEGORIES_STORAGE_KEY = "monea-custom-categories-v1";
@@ -275,11 +287,13 @@ async function saveTransactions(transactions, extraCategories = []) {
   const account = window.MoneaAccount;
   const identity = account?.identity;
   const expectedSnapshot = localSnapshot;
+  updateSyncIndicator("Syncing…");
   try {
     if (!account || account.mode === "loading") throw new Error("Wait for account settings to finish loading.");
     const categories = CategoryPolicy.merge(state.categories, [...extraCategories, ...CategoryPolicy.fromTransactions(transactions)]);
     if (account.mode === "account") {
       await account.save(transactions);
+      updateSyncIndicator("Saved to account");
       return true;
     }
     const persist = () => {
@@ -300,8 +314,10 @@ async function saveTransactions(transactions, extraCategories = []) {
     };
     if (navigator.locks) await navigator.locks.request("monea-local-transactions", persist);
     else persist();
+    updateSyncIndicator("Saved on this device");
     return true;
   } catch (error) {
+    updateSyncIndicator("Save failed");
     showToast("Changes not saved", error.message || "Storage is unavailable. Please try again.");
     return false;
   }
@@ -473,6 +489,7 @@ function transactionRow(transaction) {
       <td><span class="amount ${transaction.type}">${sign}${formatCurrency.format(transaction.amount)}</span></td>
       <td>
         ${transaction.category === "Debt Repayment" ? `<button class="loan-status-button" type="button" data-loan-id="${transaction.id}" aria-pressed="${transaction.paid === true}" aria-label="${transaction.paid ? "Mark unpaid" : "Mark paid"}: ${safeName}">${transaction.paid ? "Paid · Undo" : "Mark paid"}</button>` : ""}
+        <button class="edit-button" type="button" data-duplicate-id="${transaction.id}" title="Duplicate with today’s date">Duplicate</button>
         <button class="edit-button" type="button" data-edit-id="${transaction.id}" aria-label="Edit ${safeName}" title="Edit transaction">Edit</button>
         <button class="delete-button" type="button" data-delete-id="${transaction.id}" aria-label="Delete ${safeName}" title="Delete transaction">
           <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6" /></svg>
@@ -512,10 +529,11 @@ function renderTransactions() {
 }
 
 function renderBudgets() {
+  const customLimits = readExtras("perfi-category-limits", {});
   const expenses = transactionsForMonth().filter((transaction) => transaction.type === "expense");
   const totals = getMonthlyTotals();
   const budgets = budgetDefinitions.map((budget) => ({
-    ...budget,
+    ...budget, limit: Number(customLimits[budget.category]) || budget.limit,
     spent: expenses
       .filter((transaction) => budget.categories.includes(transaction.category))
       .reduce((sum, transaction) => sum + Number(transaction.amount), 0),
@@ -542,8 +560,9 @@ function renderBudgets() {
           <div class="budget-item-heading">
             <span class="budget-dot" style="background:${fillColor}"></span>
             <strong>${budget.category}</strong>
-            <span><b>${shortCurrency.format(budget.spent)}</b></span>
+            <span><b>${shortCurrency.format(budget.spent)}</b> / ${shortCurrency.format(budget.limit)}</span>
           </div>
+          <small class="perfi-budget-remaining">${budgetPercent >= 100 ? "Limit reached" : budgetPercent >= 80 ? "Approaching limit" : "Remaining"}: ${shortCurrency.format(Math.max(0, budget.limit - budget.spent))}</small>
           <div class="progress-track" role="progressbar" aria-label="${budget.category} budget used" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(budgetPercent)}">
             <div class="progress-fill" style="width:${Math.min(budgetPercent, 100)}%;background:${fillColor}"></div>
           </div>
@@ -669,18 +688,18 @@ function defaultDateForSelectedMonth() {
 
 let editingTransaction = null;
 
-function openDialog(transaction = null) {
-  editingTransaction = transaction?.id ? { ...transaction } : null;
+function openDialog(transaction = null, duplicate = false) {
+  editingTransaction = transaction?.id && !duplicate ? { ...transaction } : null;
   elements.form.reset();
   document.querySelector("#dialog-title").textContent = editingTransaction ? "Edit transaction" : "Add transaction";
   elements.dialog.querySelector(".section-kicker").textContent = editingTransaction ? "Update entry" : "New entry";
-  if (editingTransaction) elements.form.elements.namedItem("type").value = editingTransaction.type;
+  if (transaction) elements.form.elements.namedItem("type").value = transaction.type;
   renderCategoryOptions();
   elements.date.max = todayKey;
   elements.date.value = defaultDateForSelectedMonth();
-  if (editingTransaction) {
+  if (transaction) {
     for (const field of ["name", "note", "amount", "date", "category"]) {
-      elements.form.elements.namedItem(field).value = editingTransaction[field] ?? "";
+      elements.form.elements.namedItem(field).value = duplicate && field === "date" ? todayKey : transaction[field] ?? "";
     }
     updateCustomCategoryField();
   }
@@ -907,8 +926,13 @@ async function importCsv(event) {
       amount: column("amount", "amount (php)", "amount php"),
       paid: column("paid", "loan paid"),
     };
-    if ([columns.date, columns.type, columns.name, columns.category, columns.amount].includes(-1)) {
-      throw new Error("Required columns: Date, Type, Name, Category, and Amount (PHP).");
+    for (const field of ["date", "type", "name", "category", "amount"]) {
+      if (columns[field] !== -1) continue;
+      const response = window.prompt(`CSV column mapping: Which column number (1-${headers.length}) contains ${field}?\nHeaders: ${rows[0].join(" | ")}`, "");
+      if (response === null) return;
+      const selected = Number(response) - 1;
+      if (!Number.isInteger(selected) || selected < 0 || selected >= headers.length) throw new Error(`Invalid column mapping for ${field}.`);
+      columns[field] = selected;
     }
 
     const typeAliases = {
@@ -968,7 +992,8 @@ async function importCsv(event) {
     }
 
     const skipped = invalidCount + duplicateCount;
-    const confirmed = window.confirm(`Import ${imported.length} transactions${skipped ? ` and skip ${skipped} invalid or duplicate rows` : ""}?`);
+    const preview = imported.slice(0, 5).map((item) => `${item.date} | ${item.name} | ${formatCurrency.format(item.amount)} | ${item.type}`).join("\n");
+    const confirmed = window.confirm(`CSV IMPORT PREVIEW\n\n${imported.length} valid rows\n${invalidCount} invalid rows\n${duplicateCount} duplicate rows\n\nFirst entries:\n${preview}\n\nImport valid entries?`);
     if (!confirmed) return;
 
     if (window.MoneaAccount?.identity !== identity) throw new Error("Your account changed. Select the file again.");
@@ -1007,7 +1032,7 @@ const currentHour = today.getHours();
 const greeting = currentHour < 12 ? "Good morning" : currentHour < 18 ? "Good afternoon" : "Good evening";
 document.querySelector("#greeting").textContent = `${greeting}, Welcome to Perfi.`;
 
-document.querySelectorAll("[data-open-dialog]").forEach((button) => button.addEventListener("click", openDialog));
+document.querySelectorAll("[data-open-dialog]").forEach((button) => button.addEventListener("click", () => openDialog()));
 document.querySelectorAll("[data-close-dialog]").forEach((button) => button.addEventListener("click", closeDialog));
 
 elements.dialog.addEventListener("click", (event) => {
@@ -1059,6 +1084,12 @@ elements.category.addEventListener("change", (event) => {
 });
 
 elements.list.addEventListener("click", async (event) => {
+  const duplicateButton = event.target.closest("[data-duplicate-id]");
+  if (duplicateButton) {
+    const item = state.transactions.find((entry) => entry.id === duplicateButton.dataset.duplicateId);
+    if (item) openDialog(item, true);
+    return;
+  }
   const editButton = event.target.closest("[data-edit-id]");
   if (editButton) {
     const transaction = state.transactions.find((item) => item.id === editButton.dataset.editId);
@@ -1093,11 +1124,21 @@ document.querySelector("#toggle-balance").addEventListener("click", (event) => {
 });
 
 document.querySelector("#manage-budgets").addEventListener("click", () => {
-  const remaining = balanceFromTotals(getMonthlyTotals());
-  const message = remaining >= 0
-    ? `${shortCurrency.format(remaining)} remains in ${monthLabel(state.selectedMonth)}.`
-    : `${shortCurrency.format(Math.abs(remaining))} is over your available funds in ${monthLabel(state.selectedMonth)}.`;
-  showToast("Monthly budget status", message);
+  const current = readExtras("perfi-category-limits", {});
+  const next = { ...current };
+  for (const budget of budgetDefinitions) {
+    const value = window.prompt(`Monthly limit for ${budget.category} (PHP)`, String(current[budget.category] || budget.limit));
+    if (value === null) return;
+    const amount = Number(value);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 999999999) {
+      showToast("Invalid budget", "Enter a positive monthly limit.");
+      return;
+    }
+    next[budget.category] = amount;
+  }
+  writeExtras("perfi-category-limits", next);
+  renderBudgets();
+  showToast("Budget limits updated", "Your monthly limits were saved on this device.");
 });
 
 document.querySelectorAll('input[name="type"]').forEach((input) => {
@@ -1183,7 +1224,9 @@ document.addEventListener("monea:account", (event) => {
   }
   renderCategoryOptions();
   state.categoryFilter = elements.category.value;
+  updateSyncIndicator(mode === "loading" ? "Syncing…" : mode === "account" ? "Saved to account" : "Saved on this device");
   renderAll();
+  if (mode === "account") offerGuestMigration();
 });
 
 renderCategoryOptions();
@@ -1198,3 +1241,27 @@ window.addEventListener("storage", (event) => {
 });
 
 window.addEventListener("focus", refreshSharedData);
+
+let migrationOfferedFor = null;
+async function offerGuestMigration() {
+  const account = window.MoneaAccount;
+  if (account?.mode !== "account" || migrationOfferedFor === account.identity) return;
+  migrationOfferedFor = account.identity;
+  let guest = [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const stored = JSON.parse(raw);
+    guest = normalizeTransactionList(Array.isArray(stored) ? stored : stored?.transactions) || [];
+  } catch { return; }
+  const remote = state.transactions;
+  const known = new Set(remote.map(transactionFingerprint));
+  const additions = guest.filter((item) => !known.has(transactionFingerprint(item)));
+  if (!additions.length) return;
+  if (!window.confirm(`Found ${additions.length} local transaction(s) not in your account. Import these into your account? Existing account transactions will be kept. Please review your local entries before confirming.`)) return;
+  if (account.identity !== migrationOfferedFor) return;
+  if (await saveTransactions([...remote, ...additions])) {
+    renderAll();
+    showToast("Guest data imported", `${additions.length} local transactions added to your account. The local copy remains on this device.`);
+  }
+}

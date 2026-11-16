@@ -1,6 +1,7 @@
 const { createClient } = require("@supabase/supabase-js");
 const { HttpError, validateTransactions } = require("./validation.cjs");
 const CategoryPolicy = require("../category-policy.js");
+const { loginEmail } = require("./login-email.cjs");
 
 const DATABASE_ERRORS = {
   REVISION_CONFLICT: [409, "Another session changed your data. The latest version has been loaded; try again."],
@@ -145,13 +146,24 @@ function createHandler({ env = process.env, db: providedDb, fetch: sendRequest =
               headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json",
                 "Idempotency-Key": `login/${user.id}/${signedInAt}` },
               body: JSON.stringify({ from: env.LOGIN_EMAIL_FROM, to: [user.email],
-                subject: "Login successful — Perfi",
-                text: `You successfully logged in to Perfi on ${new Date(signedInAt).toUTCString()}.\n\nThis is just a notification. No action is required, and you do not need to click anything to complete your login.` }),
+                ...loginEmail(signedInAt) }),
               signal: AbortSignal.timeout(5000),
             });
-            if (response.ok) notification = "sent";
+            if (response.ok) {
+              notification = "sent";
+              console.log("Login notification email accepted by Resend.");
+            }
             else console.warn("Login notification email was rejected:", response.status);
-          } catch { console.warn("Login notification email could not be sent."); }
+          } catch (error) {
+            // Log only diagnostic identifiers, never request headers or email contents.
+            const diagnostic = [error?.name, error?.cause?.code]
+              .filter((value) => typeof value === "string" && /^[A-Za-z0-9_]+$/.test(value))
+              .join(" / ");
+            console.warn("Login notification email could not be sent:", diagnostic || "Unknown error");
+          }
+        } else {
+          const missing = ["RESEND_API_KEY", "LOGIN_EMAIL_FROM"].filter((name) => !env[name]);
+          console.warn("Login notification email skipped. Missing server configuration:", missing.join(", "));
         }
         res.end(JSON.stringify({ notification }));
         return;
