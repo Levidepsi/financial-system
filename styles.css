@@ -2114,8 +2114,8 @@ tr:hover .delete-button,
   border: 1px solid var(--line);
   border-radius: 16px;
   background: white;
-      max-width: 1440px;
-      margin-inline: auto;
+  max-width: 1440px;
+  margin-inline: auto;
 }
 .account-banner p, .plan-note, #account-message {
   margin: 6px 0 0;

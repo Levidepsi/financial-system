@@ -31,12 +31,17 @@ const server = http.createServer((request, response) => {
   try { requestPath = decodeURIComponent(new URL(request.url, `http://${host}`).pathname); }
   catch { response.writeHead(400).end("Invalid URL"); return; }
   const relativePath = requestPath === "/" ? "index.html" : requestPath.replace(/^\/+/, "");
-  const filePath = path.resolve(root, relativePath);
+  const builtPath = path.resolve(root, relativePath);
 
-  if (!filePath.startsWith(`${root}${path.sep}`)) {
+  if (!builtPath.startsWith(`${root}${path.sep}`)) {
     response.writeHead(403).end("Forbidden");
     return;
   }
+
+  // Serve the editable stylesheet directly so local CSS changes need only a refresh.
+  const filePath = relativePath === "styles.css"
+    ? path.join(__dirname, "styles.css")
+    : builtPath;
 
   fs.stat(filePath, (statError, stat) => {
     if (statError || !stat.isFile()) {
