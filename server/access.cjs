@@ -134,7 +134,7 @@ function createAccess({ env, database, sendRequest = fetch }) {
             "Idempotency-Key": `perfi-welcome/${data.user.id}` },
           body: JSON.stringify({ from: env.LOGIN_EMAIL_FROM || "Perfi <login@perfi.asia>", to: [email],
             subject: "Welcome to Perfi — Your Lifetime Access Is Ready",
-            text: "Welcome to Perfi!\n\nYour account has been successfully activated.\n\nYou now have lifetime access to your personal finance dashboard.\n\nYou can log in anytime at https://perfi.asia.\n\nThank you for choosing Perfi!" }),
+            text: "Welcome to Perfi!\n\nYour account has been successfully activated.\n\nYou now have lifetime access to your personal finance dashboard.\n\nYou can log in anytime at https://perfi.asia/login.\n\nThank you for choosing Perfi!" }),
           signal: AbortSignal.timeout(5000),
         });
         if (!response.ok) console.warn("Activation welcome email rejected:", response.status);
