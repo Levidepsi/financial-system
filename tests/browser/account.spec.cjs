@@ -130,6 +130,71 @@ async function signedIn(context, transactions = [], plan = "normal", categories 
   return account;
 }
 
+test("consecutive saves work during a slow refresh and ignore its stale response", async ({ page, context }) => {
+  const account = await signedIn(context);
+  await page.goto("/");
+  await page.waitForFunction(() => window.MoneaAccount?.mode === "account");
+  let releaseRefresh;
+  let refreshStarted;
+  const started = new Promise(resolve => { refreshStarted = resolve; });
+  const gate = new Promise(resolve => { releaseRefresh = resolve; });
+  await context.route("**/api/account", async route => {
+    const snapshot = structuredClone(account);
+    refreshStarted();
+    await gate;
+    await route.fulfill({ json: snapshot });
+  });
+  await page.evaluate(() => { window.pendingRefresh = window.MoneaAccount.refresh(); });
+  await started;
+  try {
+    const first = entry("First fast entry");
+    const second = entry("Second fast entry");
+    await page.evaluate(async entries => {
+      await window.MoneaAccount.save([entries[0]]);
+      await window.MoneaAccount.save(entries);
+    }, [first, second]);
+    expect(account.transactions).toHaveLength(2);
+  } finally {
+    releaseRefresh();
+  }
+  await page.evaluate(() => window.pendingRefresh);
+  await expect(page.locator("#transaction-list")).toContainText("Second fast entry");
+  // A third save must use the latest revision, not the stale refresh revision.
+  await page.evaluate(entries => window.MoneaAccount.save(entries), [...account.transactions, entry("Third fast entry")]);
+  expect(account.transactions).toHaveLength(3);
+});
+
+test("transaction form prevents duplicate submissions while a save is pending", async ({ page, context }) => {
+  const account = await signedIn(context);
+  let releaseSave;
+  const gate = new Promise(resolve => { releaseSave = resolve; });
+  let writes = 0;
+  await context.route("**/api/transactions", async route => {
+    writes += 1;
+    await gate;
+    await route.fallback();
+  });
+  await page.goto("/");
+  await page.waitForFunction(() => window.MoneaAccount?.mode === "account");
+  await page.locator("[data-open-dialog]").first().click();
+  await page.locator('input[name="type"][value="income"]').check();
+  await page.locator("#amount").fill("100");
+  await page.locator('#transaction-form input[name="name"]').fill("Quick salary");
+  await page.getByRole("button", { name: "Save transaction", exact: true }).click();
+  try {
+    await expect(page.getByRole("button", { name: "Saving…", exact: true })).toBeDisabled();
+    await page.locator("#transaction-form").evaluate(form => form.requestSubmit());
+    await expect.poll(() => writes).toBe(1);
+  } finally {
+    releaseSave();
+  }
+  await expect(page.locator("#transaction-dialog")).toBeHidden();
+  expect(account.transactions).toHaveLength(1);
+  expect(writes).toBe(1);
+  await page.locator("[data-open-dialog]").first().click();
+  await expect(page.getByRole("button", { name: "Save transaction", exact: true })).toBeEnabled();
+});
+
 test("transactions can be edited and deleted with visible controls", async ({ page, context }) => {
   await guest(context, [{ ...entry("Loan"), paid: true }]);
   await page.goto("/");

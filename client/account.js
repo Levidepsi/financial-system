@@ -10,6 +10,7 @@ let mode = "loading";
 let generation = 0;
 let saving = false;
 let refreshing = false;
+let mutationVersion = 0;
 let creatingAccount = false;
 let authenticating = false;
 let loginSuccessful = false;
@@ -57,19 +58,20 @@ async function request(path, options = {}) {
 async function refresh() {
   if (!user || refreshing || saving) return;
   const expected = generation;
+  const expectedMutation = mutationVersion;
   refreshing = true;
   try {
     const next = await request("account");
-    if (expected !== generation) return;
+    if (expected !== generation || expectedMutation !== mutationVersion) return;
     account = next;
     mode = "account";
     if (!recoveryMode) message.textContent = `${loginSuccessful ? "Login successful. " : ""}${user.email}. All features are free. Your financial data is synced to your account.`;
     publish();
   } catch (error) {
-    if (expected === generation && !recoveryMode) message.textContent = error.message;
+    if (expected === generation && expectedMutation === mutationVersion && !recoveryMode) message.textContent = error.message;
     throw error;
   } finally {
-    if (expected === generation) refreshing = false;
+    if (expected === generation && expectedMutation === mutationVersion) refreshing = false;
   }
 }
 
@@ -101,8 +103,10 @@ window.MoneaAccount = {
   historyReport() { return request("reports/history"); },
   async mutate(path, method, body) {
     if (mode !== "account") throw new Error("Wait for your account to finish loading.");
-    if (saving || refreshing) throw new Error("An account update is in progress. Please try again.");
+    if (saving) throw new Error("An account update is in progress. Please try again.");
     const expected = generation;
+    mutationVersion += 1;
+    refreshing = false;
     saving = true;
     try {
       const next = await request(path, { method, body: JSON.stringify({ ...body, revision: account.revision }) });

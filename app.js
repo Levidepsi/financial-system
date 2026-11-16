@@ -1039,9 +1039,25 @@ elements.dialog.addEventListener("click", (event) => {
   if (event.target === elements.dialog) closeDialog();
 });
 
-elements.form.addEventListener("submit", (event) => {
+let transactionSubmitting = false;
+elements.form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  addTransaction(event.currentTarget);
+  if (transactionSubmitting) return;
+  const form = event.currentTarget;
+  const button = form.querySelector('button[type="submit"]');
+  const label = button.textContent;
+  transactionSubmitting = true;
+  button.disabled = true;
+  button.textContent = "Saving…";
+  form.setAttribute("aria-busy", "true");
+  try {
+    await addTransaction(form);
+  } finally {
+    transactionSubmitting = false;
+    button.disabled = false;
+    button.textContent = label;
+    form.removeAttribute("aria-busy");
+  }
 });
 
 document.querySelectorAll("[data-filter]").forEach((button) => {

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Get to know Perfi and discover the story behind your personal finance companion." />
+    <title>About — Perfi</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="about.css" />
+    <script src="about.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#about-content">Skip to content</a>
+    <header class="about-header">
+      <span class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 17.5V11m7 6.5v-11m7 11V3.5" /></svg></span>Perfi</span>
+    </header>
+    <main class="about-page" id="about-content">
+      <header class="about-intro">
+        <p class="section-kicker">About Perfi</p>
+        <h1>A little clarity.<br>A better everyday.</h1>
+        <p>Perfi brings your income, expenses, and savings together, so you can spend less time sorting numbers and more time on what matters.</p>
+      </header>
+      <section class="about-video-card" aria-labelledby="video-title">
+        <div class="about-video-heading"><p class="section-kicker">The story behind Perfi</p><h2 id="video-title">Get to know us</h2></div>
+        <!-- Add the video URL to data-video-src and the product URL to data-product-url. -->
+        <div id="about-media" data-video-src="" data-product-url="">
+          <div class="about-video-placeholder" id="video-placeholder">
+            <span class="about-play" aria-hidden="true">▶</span>
+            <h3>Our story, coming soon</h3>
+            <p>A short introduction to Perfi will be here soon.</p>
+          </div>
+          <video id="about-video" controls playsinline preload="metadata" aria-label="About Perfi" hidden></video>
+          <p id="video-error" role="status" hidden>The video could not load. Please refresh the page and try again.</p>
+        </div>
+        <div aria-live="polite">
+          <section class="about-product" id="about-product" aria-labelledby="product-title" hidden>
+            <p class="section-kicker">Thanks for watching</p>
+            <h2 id="product-title">Take the next step</h2>
+            <p>Explore our product on Raket PH.</p>
+            <a class="primary-button" id="raket-link">View on Raket PH <span aria-hidden="true">↗</span></a>
+          </section>
+        </div>
+      </section>
+      <footer class="about-footer">Made for a clearer view of your money.</footer>
+    </main>
+  </body>
+</html>
