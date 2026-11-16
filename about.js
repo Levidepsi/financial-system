@@ -29,3 +29,16 @@ video.addEventListener("ended", () => {
 video.addEventListener("error", () => {
   document.querySelector("#video-error").hidden = false;
 });
+video.addEventListener("loadeddata", () => {
+  document.querySelector("#video-error").hidden = true;
+});
+
+// Visitors may open this page directly while an older dashboard worker is active.
+if ("serviceWorker" in navigator && window.location.protocol !== "file:") {
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (videoUrl && video.error) video.load();
+  });
+  navigator.serviceWorker.register("./service-worker.js", { updateViaCache: "none" })
+    .then(registration => registration.update())
+    .catch(() => { /* Video playback also works without offline support. */ });
+}
