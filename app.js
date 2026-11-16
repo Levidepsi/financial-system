@@ -79,20 +79,20 @@ const defaultTransactions = [
 ];
 
 const budgetDefinitions = [
-  { category: "Housing & Bills", categories: ["Housing & Bills"], limit: 15000, color: "#1c5c45" },
-  { category: "Debt Repayments", categories: ["Debt Repayment"], limit: 22000, color: "#e2ad57" },
-  { category: "Subscriptions & Tech", categories: ["Shopping", "Entertainment", "Utilities"], limit: 12000, color: "#8878b7" },
+  { category: "Housing & Bills", categories: ["Housing & Bills"], limit: 15000, color: "#783916" },
+  { category: "Debt Repayments", categories: ["Debt Repayment"], limit: 22000, color: "#e9b54c" },
+  { category: "Subscriptions & Tech", categories: ["Shopping", "Entertainment", "Utilities"], limit: 12000, color: "#f58fa8" },
 ];
 
 const categoryThemes = {
-  "Housing & Bills": { className: "housing", color: "#53715f", bg: "#e9f0eb", icon: '<path d="m3 11 9-8 9 8M5 9v11h14V9M9 20v-6h6v6" />' },
-  Shopping: { className: "shopping", color: "#947026", bg: "#f7f0dc", icon: '<path d="M6 8h12l1 13H5L6 8Zm3 0V6a3 3 0 0 1 6 0v2" />' },
-  "Debt Repayment": { className: "debt", color: "#b15f49", bg: "#f9e9e4", icon: '<path d="M5 7h14v12H5zM8 7V5h8v2M8 12h8m-8 3h5" />' },
-  Utilities: { className: "utilities", color: "#426d9d", bg: "#e7eff8", icon: '<path d="M8 15a6 6 0 0 1 8 0m-11-3a10 10 0 0 1 14 0m-8 6h2" />' },
-  Entertainment: { className: "entertainment", color: "#705f9d", bg: "#efebf7", icon: '<path d="M4 7h16v12H4zM8 4l2 3m6-3-2 3m-6 5h.01M12 15h4" />' },
-  Health: { className: "health", color: "#b45766", bg: "#f8e7ea", icon: '<path d="M12 21S4 16.5 4 9.5A4.5 4.5 0 0 1 12 6a4.5 4.5 0 0 1 8 3.5c0 7-8 11.5-8 11.5Z" />' },
-  Income: { className: "income", color: "#287655", bg: "#e5f3eb", icon: '<path d="M12 19V5m0 0L7 10m5-5 5 5M5 21h14" />' },
-  Savings: { className: "savings", color: "#426d9d", bg: "#e7eff8", icon: '<path d="M5 10h14v10H5zM8 10V8a4 4 0 0 1 8 0v2M9 15h6" />' },
+  "Housing & Bills": { className: "housing", color: "#783916", bg: "#f7c4d3", icon: '<path d="m3 11 9-8 9 8M5 9v11h14V9M9 20v-6h6v6" />' },
+  Shopping: { className: "shopping", color: "#783916", bg: "#e9b54c", icon: '<path d="M6 8h12l1 13H5L6 8Zm3 0V6a3 3 0 0 1 6 0v2" />' },
+  "Debt Repayment": { className: "debt", color: "#783916", bg: "#f58fa8", icon: '<path d="M5 7h14v12H5zM8 7V5h8v2M8 12h8m-8 3h5" />' },
+  Utilities: { className: "utilities", color: "#783916", bg: "#f7c4d3", icon: '<path d="M8 15a6 6 0 0 1 8 0m-11-3a10 10 0 0 1 14 0m-8 6h2" />' },
+  Entertainment: { className: "entertainment", color: "#783916", bg: "#fff7ef", icon: '<path d="M4 7h16v12H4zM8 4l2 3m6-3-2 3m-6 5h.01M12 15h4" />' },
+  Health: { className: "health", color: "#783916", bg: "#f58fa8", icon: '<path d="M12 21S4 16.5 4 9.5A4.5 4.5 0 0 1 12 6a4.5 4.5 0 0 1 8 3.5c0 7-8 11.5-8 11.5Z" />' },
+  Income: { className: "income", color: "#783916", bg: "#e9b54c", icon: '<path d="M12 19V5m0 0L7 10m5-5 5 5M5 21h14" />' },
+  Savings: { className: "savings", color: "#783916", bg: "#f7c4d3", icon: '<path d="M5 10h14v10H5zM8 10V8a4 4 0 0 1 8 0v2M9 15h6" />' },
 };
 
 function normalizeCategoryName(value) {
@@ -536,7 +536,7 @@ function renderBudgets() {
   document.querySelector("#budget-list").innerHTML = budgets
     .map((budget) => {
       const budgetPercent = budget.limit ? (budget.spent / budget.limit) * 100 : 0;
-      const fillColor = budgetPercent > 100 ? "#e47861" : budget.color;
+      const fillColor = budgetPercent > 100 ? "#b04a3e" : budget.color;
       return `
         <div class="budget-item">
           <div class="budget-item-heading">
