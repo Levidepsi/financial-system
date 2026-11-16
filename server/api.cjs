@@ -2,6 +2,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { HttpError, validateTransactions } = require("./validation.cjs");
 const CategoryPolicy = require("../category-policy.js");
 const { loginEmail } = require("./login-email.cjs");
+const { createAccess, enabled: accessEnabled, productUrl, sessionId } = require("./access.cjs");
 
 const DATABASE_ERRORS = {
   REVISION_CONFLICT: [409, "Another session changed your data. The latest version has been loaded; try again."],
@@ -78,6 +79,7 @@ function createHandler({ env = process.env, db: providedDb, fetch: sendRequest =
     result(await database().from("monea_accounts").upsert({ user_id: userId }, { onConflict: "user_id", ignoreDuplicates: true }));
     return result(await database().from("monea_accounts").select("*").eq("user_id", userId).single());
   }
+  const access = createAccess({ env, database, sendRequest });
   return async function handler(req, res) {
     res.setHeader("Cache-Control", "no-store, private");
     res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -85,16 +87,23 @@ function createHandler({ env = process.env, db: providedDb, fetch: sendRequest =
     try {
       const url = new URL(req.url, "http://localhost");
       const route = url.searchParams.get("route") || url.pathname.replace(/^\/api\/?/, "");
+      if (route.startsWith("page/")) {
+        if (req.method !== "GET") throw new HttpError(405, "Method not allowed.");
+        await access.page(req, res, route.slice(5));
+        return;
+      }
       if (route.startsWith("billing/") || route.startsWith("stripe/")) {
         throw new HttpError(410, "Perfi uses a one-time purchase through Raket PH. In-app subscriptions and billing are disabled.");
       }
       if (route === "config" && req.method === "GET") {
         res.end(JSON.stringify({ configured: authConfigured(), billingConfigured: billingConfigured(),
+          accessEnabled: accessEnabled(env), productUrl: productUrl(env),
           supabaseUrl: authConfigured() ? env.SUPABASE_URL : null,
           supabaseAnonKey: authConfigured() ? env.SUPABASE_ANON_KEY : null }));
         return;
       }
       if (route === "auth/register") {
+        if (accessEnabled(env)) throw new HttpError(403, "Create your account through the activation page after purchasing Perfi.");
         if (req.method !== "POST") { res.setHeader("Allow", "POST"); throw new HttpError(405, "Method not allowed."); }
         if (!hasTrustedOrigin(req, env)) {
           throw new HttpError(403, "Unrecognized request origin.");
@@ -121,7 +130,25 @@ function createHandler({ env = process.env, db: providedDb, fetch: sendRequest =
         res.end(JSON.stringify({ created: true }));
         return;
       }
-      const allowed = { account: "GET", transactions: "PUT", categories: "POST", "reports/history": "GET", "auth/login-notification": "POST" };
+      if (["activation/session", "activation/register"].includes(route)) {
+        if (!accessEnabled(env)) throw new HttpError(503, "Activation is not enabled yet.");
+        if (req.method !== "POST") throw new HttpError(405, "Method not allowed.");
+        if (!req.headers.origin || !hasTrustedOrigin(req, env)) throw new HttpError(403, "Unrecognized request origin.");
+        if (route === "activation/session") {
+          let identity;
+          try { identity = await access.webIdentity(req); } catch (error) { if (![401, 403].includes(error.status)) throw error; }
+          if (identity) { res.end(JSON.stringify({ state: "active", redirect: "/dashboard" })); return; }
+          const session = await access.activation(req, res, true);
+          res.end(JSON.stringify({ state: session.state }));
+        } else {
+          const result = await access.register(req, res, await jsonBody(req));
+          res.statusCode = 201;
+          res.end(JSON.stringify(result));
+        }
+        return;
+      }
+      const allowed = { account: "GET", transactions: "PUT", categories: "POST", "reports/history": "GET", "auth/login-notification": "POST",
+        "auth/session": "POST", "auth/activity": "POST", "auth/logout": "POST" };
       if (!Object.hasOwn(allowed, route)) throw new HttpError(404, "Not found.");
       if (req.method !== allowed[route]) { res.setHeader("Allow", allowed[route]); throw new HttpError(405, "Method not allowed."); }
       if (req.method !== "GET" && !hasTrustedOrigin(req, env)) {
@@ -132,6 +159,18 @@ function createHandler({ env = process.env, db: providedDb, fetch: sendRequest =
       const { data: auth, error } = await database().auth.getUser(token);
       if (error || !auth?.user) throw new HttpError(401, "Your session expired. Sign in again.");
       const user = auth.user;
+      if (route === "auth/logout") {
+        if (accessEnabled(env)) await access.logout(req, res, user, token);
+        res.end(JSON.stringify({ loggedOut: true }));
+        return;
+      }
+      if (accessEnabled(env)) await access.authorize(user.id, sessionId(token), req.method !== "GET" && route !== "auth/login-notification");
+      if (route === "auth/session") {
+        if (accessEnabled(env)) await access.bridge(req, res, user, token);
+        res.end(JSON.stringify({ access: "lifetime", redirect: "/dashboard" }));
+        return;
+      }
+      if (route === "auth/activity") { res.end(JSON.stringify({ active: true })); return; }
       if (route === "auth/login-notification") {
         const signedInAt = Date.parse(user.last_sign_in_at);
         const age = Date.now() - signedInAt;

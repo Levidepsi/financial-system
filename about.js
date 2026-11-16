@@ -12,7 +12,7 @@ function configuredUrl(value) {
 }
 
 const videoUrl = configuredUrl(media.dataset.videoSrc);
-const productUrl = configuredUrl(media.dataset.productUrl);
+let productUrl = configuredUrl(media.dataset.productUrl);
 if (videoUrl) {
   video.src = videoUrl;
   video.hidden = false;
@@ -22,6 +22,15 @@ if (productUrl) {
   link.href = productUrl;
   link.hidden = false;
   document.querySelector("#product-pending").hidden = true;
+}
+if (!productUrl) {
+  fetch("/api/config", { cache: "no-store" }).then(response => response.ok ? response.json() : null).then(config => {
+    productUrl = configuredUrl(config?.productUrl);
+    if (!productUrl) return;
+    link.href = productUrl;
+    link.hidden = false;
+    document.querySelector("#product-pending").hidden = true;
+  }).catch(() => {});
 }
 video.addEventListener("ended", () => {
   if (videoUrl) product.hidden = false;

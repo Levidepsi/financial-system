@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Perfi: one-time purchase, lifetime access to your personal finance dashboard.">
+  <title>Welcome to Perfi</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/access.css">
+  <script src="/access.js" defer></script>
+</head>
+<body data-page="home">
+  <a class="skip-link" href="#access-content">Skip to content</a>
+  <header class="access-header"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 17.5V11m7 6.5v-11m7 11V3.5" /></svg></span>Perfi</a></header>
+  <main class="access-page" id="access-content">
+    <section id="purchase-section" class="access-card">
+      <p class="section-kicker">One-time purchase · Lifetime access</p>
+      <h1>Unlock Your Financial Dashboard</h1>
+      <p class="access-description">Bring your income, expenses, savings, and budgets together. Get a clearer view of your money with Perfi.</p>
+      <p class="access-price">₱299 <span>once, for lifetime access</span></p>
+      <p>No monthly subscriptions. Existing Perfi users already have complimentary lifetime access.</p>
+      <div class="access-actions"><a id="purchase-link" class="primary-button" hidden>Purchase on Raket PH</a><a class="secondary-button" href="/about.html">Watch Demo</a></div>
+      <p id="purchase-unavailable" hidden>The purchase link is being prepared. Please check back soon.</p>
+      <a class="text-button" href="/login">Already Have an Account? Login</a>
+    </section>
+    <section id="auth-section" class="access-card" hidden>
+      <p class="section-kicker">Your Perfi account</p><h1 id="auth-title">Welcome back</h1>
+      <p id="auth-description">Log in to your lifetime dashboard.</p>
+      <p id="auth-status" role="status" aria-live="polite"></p>
+      <form id="access-form" hidden>
+        <label>Email address<input id="access-email" type="email" autocomplete="email" maxlength="254" required></label>
+        <label>Password<input id="access-password" type="password" autocomplete="current-password" minlength="8" maxlength="72" required></label>
+        <label id="confirm-label" hidden>Confirm password<input id="access-confirm" type="password" autocomplete="new-password" minlength="8" maxlength="72"></label>
+        <button class="primary-button" id="access-submit" type="submit">Log in</button>
+      </form>
+      <form id="access-recovery" hidden>
+        <label>Email address<input id="reset-email" type="email" autocomplete="email" required></label>
+        <button class="primary-button" type="submit">Send reset link</button>
+      </form>
+      <form id="access-new-password" hidden>
+        <label>New password<input id="reset-password" type="password" autocomplete="new-password" minlength="8" maxlength="72" required></label>
+        <label>Confirm password<input id="reset-confirm" type="password" autocomplete="new-password" minlength="8" maxlength="72" required></label>
+        <button class="primary-button" type="submit">Save new password</button>
+      </form>
+      <button id="access-forgot" class="text-button" type="button" hidden>Forgot password?</button>
+      <button id="access-logout" class="text-button" type="button" hidden>Log out</button>
+      <p><a class="text-button" href="/login">Already activated? Log in</a></p>
+      <p><a class="text-button" href="/">Back to Perfi</a></p>
+    </section>
+  </main>
+</body>
+</html>

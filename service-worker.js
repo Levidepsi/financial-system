@@ -1,5 +1,5 @@
-const CACHE_NAME = "perfi-offline-v14";
-const APP_SHELL = ["./", "./index.html", "./pricing.html", "./about.html", "./about.css", "./about.js", "./styles.css", "./category-policy.js", "./app.js", "./perfi-extras.js", "./account.js", "./favicon.svg", "./manifest.webmanifest"];
+const CACHE_NAME = "perfi-offline-v15";
+const APP_SHELL = ["./offline.html", "./access.css", "./access.js", "./pricing.html", "./about.html", "./about.css", "./about.js", "./styles.css", "./category-policy.js", "./app.js", "./perfi-extras.js", "./account.js", "./favicon.svg", "./manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -32,7 +32,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(event.request).catch(() => {
         const page = ["about.html", "pricing.html"].find(name => requestUrl.pathname.endsWith(`/${name}`));
-        return caches.match(page ? `./${page}` : "./index.html");
+        return caches.match(page ? `./${page}` : "./offline.html");
       }),
     );
     return;
@@ -41,7 +41,7 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     fetch(event.request)
       .then(async (response) => {
-        if (response.ok && response.status !== 206) {
+        if (response.ok && response.status !== 206 && !/no-store|private/i.test(response.headers.get("cache-control") || "")) {
           try {
             const cache = await caches.open(CACHE_NAME);
             await cache.put(event.request, response.clone());

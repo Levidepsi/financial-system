@@ -15,6 +15,7 @@ let creatingAccount = false;
 let authenticating = false;
 let loginSuccessful = false;
 let recoveryMode = null;
+let protectedDashboard = document.body.dataset.accessEnforced === "true";
 
 function publish() {
   document.dispatchEvent(new CustomEvent("monea:account", { detail: { mode, account, user } }));
@@ -22,6 +23,7 @@ function publish() {
 }
 
 function render() {
+  document.querySelector("#account-toggle").hidden = protectedDashboard;
   document.querySelector("#profile-name").textContent = user?.email || "Financial User";
   document.querySelector("#profile-plan").textContent = mode === "loading" ? "Loading account…"
     : "Lifetime access";
@@ -47,7 +49,9 @@ async function request(path, options = {}) {
   if (!response.ok) {
     if (response.status === 401) {
       await client.auth.signOut({ scope: "local" });
+      if (protectedDashboard) location.replace("/login");
     }
+    if (protectedDashboard && response.status === 403) location.replace("/login?access=required");
     const failure = new Error(payload.error || "The request failed.");
     failure.status = response.status;
     throw failure;
@@ -80,6 +84,7 @@ function acceptSession(session) {
   if (nextUser?.id === user?.id && mode !== "loading") return;
   generation += 1;
   user = nextUser;
+  if (!user && protectedDashboard) { location.replace("/login"); return; }
   if (!user && recoveryMode === "update") recoveryMode = null;
   loginSuccessful = false;
   account = null;
@@ -143,6 +148,7 @@ function setCreatingAccount(value, statusMessage) {
 }
 
 document.querySelector("#account-toggle").addEventListener("click", () => {
+  if (protectedDashboard) return;
   setCreatingAccount(!creatingAccount);
 });
 
@@ -241,9 +247,23 @@ document.querySelector("#sign-in-form").addEventListener("submit", async (event)
   }
 });
 document.querySelector("#sign-out").addEventListener("click", async () => {
+  if (protectedDashboard) {
+    try { await request("auth/logout", { method: "POST" }); }
+    catch (error) { message.textContent = error.message; return; }
+  }
   const { error } = await client.auth.signOut({ scope: "local" });
   if (error) message.textContent = error.message;
+  else if (protectedDashboard) location.replace("/login");
 });
+
+let lastActivity = 0;
+for (const name of ["pointerdown", "keydown"]) {
+  document.addEventListener(name, event => {
+    if (!event.isTrusted || !protectedDashboard || mode !== "account" || Date.now() - lastActivity < 5 * 60 * 1000) return;
+    lastActivity = Date.now();
+    void request("auth/activity", { method: "POST" }).catch(() => {});
+  }, { passive: true });
+}
 document.querySelector("#refresh-account").addEventListener("click", () => { void refresh().catch(() => {}); });
 
 window.addEventListener("storage", (event) => {
@@ -259,6 +279,7 @@ async function initialize() {
     const response = await fetch("/api/config", { cache: "no-store" });
     if (!response.ok) throw new Error("Account services are unavailable. Your local demo is still available.");
     config = await response.json();
+    protectedDashboard ||= Boolean(config.accessEnabled);
     if (!config.configured) throw new Error("Sign-in is not configured yet. You can still use all features on this device.");
     client = createClient(config.supabaseUrl, config.supabaseAnonKey, {
       auth: { flowType: "pkce", detectSessionInUrl: true, persistSession: true, autoRefreshToken: true },
@@ -292,7 +313,7 @@ async function initialize() {
       history.replaceState(null, "", url);
     }
   } catch (error) {
-    if (!user) mode = "guest";
+    if (!user) mode = protectedDashboard ? "loading" : "guest";
     message.textContent = error.message;
     publish();
   }

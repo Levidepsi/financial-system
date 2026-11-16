@@ -718,7 +718,7 @@ function openDialog(transaction = null, duplicate = false) {
     updateCustomCategoryField();
   }
   elements.dialog.showModal();
-  window.setTimeout(() => document.querySelector("#amount").focus(), 50);
+  document.querySelector("#amount").focus();
 }
 
 function closeDialog() {

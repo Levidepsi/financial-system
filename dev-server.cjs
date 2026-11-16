@@ -24,6 +24,15 @@ const contentTypes = {
 };
 
 const server = http.createServer((request, response) => {
+  const pathname = new URL(request.url, `http://${host}`).pathname;
+  const pages = { "/": "home", "/index.html": "home", "/dashboard": "dashboard", "/dashboard.html": "dashboard", "/login": "login", "/activate": "activate" };
+  if (Object.hasOwn(pages, pathname)) {
+    const params = new URL(request.url, `http://${host}`).searchParams;
+    params.set("route", `page/${pages[pathname]}`);
+    request.url = `/api?${params}`;
+    void api(request, response);
+    return;
+  }
   if (new URL(request.url, `http://${host}`).pathname.startsWith("/api/")) {
     void api(request, response);
     return;

@@ -4,6 +4,15 @@
   "buildCommand": "npm run build",
   "installCommand": "npm ci",
   "outputDirectory": "dist",
-  "rewrites": [{ "source": "/api/:path*", "destination": "/api?route=:path*" }],
+  "functions": { "api/index.js": { "includeFiles": "{index,access}.html" } },
+  "rewrites": [
+    { "source": "/", "destination": "/api?route=page/home" },
+    { "source": "/index.html", "destination": "/api?route=page/home" },
+    { "source": "/dashboard", "destination": "/api?route=page/dashboard" },
+    { "source": "/dashboard.html", "destination": "/api?route=page/dashboard" },
+    { "source": "/login", "destination": "/api?route=page/login" },
+    { "source": "/activate", "destination": "/api?route=page/activate" },
+    { "source": "/api/:path*", "destination": "/api?route=:path*" }
+  ],
   "headers": [{ "source": "/service-worker.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }]
 }

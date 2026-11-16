@@ -40,3 +40,14 @@ test("offline About navigation returns its own cached page", async () => {
   assert.equal(await (await result).text(), "About Perfi");
   assert.equal(matched, "./about.html");
 });
+
+test("protected offline pages never fall back to a cached dashboard", async () => {
+  let matched;
+  const listeners = worker({ fetch: async () => { throw new Error("offline"); },
+    caches: { match: async path => { matched = path; return new Response("Reconnect"); } } });
+  let result;
+  listeners.fetch({ request: { method: "GET", url: "https://perfi.test/dashboard", headers: new Headers(), mode: "navigate" },
+    respondWith: value => { result = value; } });
+  assert.equal(await (await result).text(), "Reconnect");
+  assert.equal(matched, "./offline.html");
+});

@@ -1,0 +1,18 @@
+.access-header { max-width: 1050px; margin: auto; padding: 28px 24px; }
+.access-page { max-width: 760px; margin: 0 auto; padding: 24px 20px 60px; }
+.access-card { padding: clamp(24px, 5vw, 48px); background: var(--surface); border: 1px solid var(--line); border-radius: 24px; box-shadow: var(--shadow); }
+.access-card h1 { font-size: clamp(30px, 5vw, 46px); line-height: 1.15; letter-spacing: -.04em; margin: 16px 0; }
+.access-card p { line-height: 1.7; }
+.access-description { color: var(--muted); font-size: 17px; }
+.access-price { font-size: 46px; font-weight: 750; color: var(--green); margin: 24px 0; }
+.access-price span { display: block; font-size: 15px; font-weight: 500; }
+.access-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 24px 0; }
+.access-card a { text-decoration: none; }
+.access-card form { display: grid; gap: 18px; margin: 24px 0; }
+.access-card label { display: grid; gap: 8px; font-size: 14px; font-weight: 600; }
+.access-card input { min-width: 0; width: 100%; min-height: 48px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 16px; }
+.access-card button, .access-actions a { min-height: 48px; }
+.access-card button:disabled { opacity: .65; cursor: wait; }
+#auth-status { color: var(--green-dark); overflow-wrap: anywhere; }
+body[data-page] [hidden] { display: none !important; }
+@media (max-width: 480px) { .access-actions { flex-direction: column; } }

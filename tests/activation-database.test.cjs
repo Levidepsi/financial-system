@@ -1,0 +1,70 @@
+const { test } = require("node:test");
+const assert = require("node:assert/strict");
+const { readFile } = require("node:fs/promises");
+const { PGlite } = require("@electric-sql/pglite");
+
+test("activation migration preserves existing data, consumes sessions atomically, and enforces inactivity", async () => {
+  const db = new PGlite();
+  const existing = "11111111-1111-4111-8111-111111111111";
+  const noLedger = "22222222-2222-4222-8222-222222222222";
+  const activated = "33333333-3333-4333-8333-333333333333";
+  const other = "44444444-4444-4444-8444-444444444444";
+  const sid = "55555555-5555-4555-8555-555555555555";
+  const activationHash = "a".repeat(64);
+  try {
+    await db.exec(`create schema auth;
+      create table auth.users(id uuid primary key, created_at timestamptz default now(), raw_app_meta_data jsonb default '{}');
+      create table auth.sessions(id uuid primary key, user_id uuid references auth.users, created_at timestamptz default now());
+      create role anon; create role authenticated; create role service_role bypassrls;`);
+    for (const file of ["001_accounts_and_billing.sql", "002_category_limits.sql", "003_free_access.sql"]) {
+      await db.exec(await readFile(`supabase/migrations/${file}`, "utf8"));
+    }
+    await db.query("insert into auth.users(id) values ($1), ($2)", [existing, noLedger]);
+    await db.query("insert into monea_accounts(user_id) values ($1)", [existing]);
+    const transactions = [{ id: "retained", name: "Salary", type: "income", category: "Salary", date: "2026-01-01", amount: 299, note: "Keep this", paid: false }];
+    await db.query("select monea_save_transactions($1, 0, $2)", [existing, JSON.stringify(transactions)]);
+    const before = (await db.query("select * from monea_accounts")).rows;
+    const categories = (await db.query("select * from monea_categories")).rows;
+    const migration = await readFile("supabase/migrations/004_lifetime_activation.sql", "utf8");
+    await db.exec(migration);
+    assert.deepEqual((await db.query("select * from monea_accounts")).rows, before);
+    assert.deepEqual((await db.query("select * from monea_categories")).rows, categories);
+    assert.equal((await db.query("select count(*)::int as n from perfi_entitlements where source='complimentary_existing_user'")).rows[0].n, 2);
+    const cutoff = (await db.query("select complimentary_cutoff from perfi_access_config")).rows[0].complimentary_cutoff;
+    await db.query("insert into perfi_activation_sessions(session_hash) values($1)", [activationHash]);
+    await assert.rejects(db.query("insert into auth.users(id,raw_app_meta_data) values($1,$2)", [activated, JSON.stringify({ perfi_activation_hash: activationHash })]), /ACTIVATION_NOT_READY/);
+    assert.equal((await db.query("select perfi_verify_migration() as result")).rows[0].result.missing, 0);
+    await db.query("insert into auth.users(id,raw_app_meta_data) values($1,$2)", [activated, JSON.stringify({ perfi_activation_hash: activationHash })]);
+    assert.equal((await db.query("select source from perfi_entitlements where user_id=$1", [activated])).rows[0].source, "activation");
+    assert.equal((await db.query("select activated_user_id from perfi_activation_sessions where session_hash=$1", [activationHash])).rows[0].activated_user_id, activated);
+    await assert.rejects(db.query("insert into auth.users(id,raw_app_meta_data) values($1,$2)", [other, JSON.stringify({ perfi_activation_hash: activationHash })]), /ACTIVATION_USED/);
+    assert.equal((await db.query("select count(*)::int as n from auth.users where id=$1", [other])).rows[0].n, 0);
+    const expired = "b".repeat(64);
+    await db.query("insert into perfi_activation_sessions(session_hash,expires_at) values($1,now()-interval '1 second')", [expired]);
+    await assert.rejects(db.query("insert into auth.users(id,raw_app_meta_data) values($1,$2)", [other, JSON.stringify({ perfi_activation_hash: expired })]), /ACTIVATION_EXPIRED/);
+    await db.query("insert into auth.users(id,created_at) values($1, now()+interval '1 minute')", [other]);
+    await db.exec(migration);
+    assert.deepEqual((await db.query("select complimentary_cutoff from perfi_access_config")).rows[0].complimentary_cutoff, cutoff);
+    assert.equal((await db.query("select count(*)::int as n from perfi_entitlements where user_id=$1", [other])).rows[0].n, 0);
+    await db.query("insert into auth.sessions(id,user_id) values($1,$2)", [sid, activated]);
+    const authorize = async touch => (await db.query("select perfi_authorize($1,$2,$3) as result", [activated, sid, touch])).rows[0].result;
+    assert.equal((await authorize(false)).status, "active");
+    await db.query("update perfi_login_activity set last_activity_at=now()-interval '6 days' where session_id=$1", [sid]);
+    const old = (await db.query("select last_activity_at from perfi_login_activity")).rows[0].last_activity_at;
+    await authorize(false);
+    assert.deepEqual((await db.query("select last_activity_at from perfi_login_activity")).rows[0].last_activity_at, old);
+    assert.equal((await authorize(true)).status, "active");
+    await db.query("update perfi_login_activity set last_activity_at=now()-interval '7 days' where session_id=$1", [sid]);
+    assert.equal((await authorize(true)).status, "expired");
+    await db.query("update perfi_login_activity set last_activity_at=now(),revoked_at=now() where session_id=$1", [sid]);
+    assert.equal((await authorize(true)).status, "expired");
+    assert.equal((await db.query("select count(*)::int as n from perfi_entitlements where user_id=$1", [activated])).rows[0].n, 1);
+    assert.equal((await db.query("select perfi_rate_limit('test',1,60) as ok")).rows[0].ok, true);
+    assert.equal((await db.query("select perfi_rate_limit('test',1,60) as ok")).rows[0].ok, false);
+    await db.exec("set role authenticated");
+    await assert.rejects(db.query("select * from perfi_activation_sessions"), /permission denied/);
+    await assert.rejects(db.query("insert into perfi_entitlements(user_id,source) values($1,'activation')", [other]), /permission denied/);
+    await assert.rejects(db.query("select perfi_verify_migration()"), /permission denied/);
+    await assert.rejects(db.query("select perfi_authorize($1,$2,true)", [activated, sid]), /permission denied/);
+  } finally { await db.close(); }
+});

@@ -2,11 +2,11 @@
 
 Perfi is sold through Raket PH for a one-time price of ₱299 with lifetime app access. After purchase, there are no recurring subscriptions or additional app access fees. Income categories, expense categories, transactions, dashboards, monthly reports, and full-history CSV exports have no subscription limits.
 
-Purchase verification is not implemented in this app; this describes the external sales offer, not an access-control mechanism. Existing local-storage keys and database identifiers retain their legacy names to preserve saved data.
+Lifetime account activation and server-side access control are implemented behind `PERFI_ACCESS_ENABLED`. Follow [ACTIVATION-DEPLOYMENT.md](ACTIVATION-DEPLOYMENT.md) before enabling it. Migration 004 must grant and verify complimentary access for existing users first. The shared activation URL does not verify a Raket PH purchase. Existing local-storage keys and database identifiers retain their legacy names to preserve saved data.
 
-The unlisted About page uses `public/lv_0_20261116113733.mp4`. Add the Raket PH product URL to `data-product-url` in `about.html` when available. The lifetime-access offer appears when playback ends; the purchase button stays hidden until a URL is configured. The build copies `public` into `dist/public`.
+The About page uses `public/lv_0_20261116113733.mp4`. Set `RAKET_PRODUCT_URL` to the real HTTPS product URL; both purchase and About pages use it. The lifetime-access offer appears when playback ends; the purchase button stays hidden until a URL is configured. The build copies `public` into `dist/public`.
 
-Email sign-in, sign-out, account ownership, and cross-device data syncing remain enabled. Guests can use all features locally, including full-history export. Sign in to save financial data to an account.
+Email sign-in, sign-out, account ownership, and cross-device data syncing remain enabled. With enforcement disabled, the previous guest/local behavior is retained online. With enforcement enabled, the homepage presents the purchase flow and the dashboard/finance APIs require authenticated lifetime access. Offline account access is not supported.
 
 ## Database update required
 
@@ -20,7 +20,7 @@ The app cannot run this migration through a Supabase service-role API key alone.
 
 Use Node.js 22 or later. Run npm ci, then npm run dev, and open http://127.0.0.1:5500. Restart the server after code changes.
 
-Copy .env.example to .env.local and set APP_URL, SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY. The public key is used for email sign-in; the service-role key stays on the server. Stripe keys are not needed. The server serves only the files built into dist.
+Copy .env.example to .env.local and set APP_URL, SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY. The public key is used for email sign-in; the service-role key stays on the server. Stripe keys are not needed. Static assets are built into dist; account and dashboard HTML is served through the server access gate.
 
 Enable the Email provider in Supabase Authentication. The Account dialog supports email/password sign-in and a separate Create account option. Account creation runs through the server service role, marks the new address as confirmed, and returns the form to sign-in, so it does not send a confirmation email. This means account email addresses are unverified. Configure Site URL and redirect allowlist for your production origin and http://127.0.0.1:5500/ when developing locally.
 
